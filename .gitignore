@@ -1,0 +1,13 @@
+# .env is intentionally gitignored — do not commit API keys
+.env
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.DS_Store
+chroma_db/
+eval/results/
+*.egg-info/
+dist/
+build/
