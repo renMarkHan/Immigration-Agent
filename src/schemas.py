@@ -31,6 +31,14 @@ class RiskLevel(str, Enum):
     L3 = "L3"
 
 
+class ActionType(str, Enum):
+    ACTION_1 = "action_1"
+    ACTION_2 = "action_2"
+    ACTION_3 = "action_3"
+    ACTION_4 = "action_4"
+
+
+
 class NoEvidenceAction(str, Enum):
     """D-003: What to do when retrieval returns no relevant evidence."""
     CITE_GAP = "cite_gap"          # L1: acknowledge gap, cite where to check
@@ -116,3 +124,5 @@ class FinalAnswer(BaseModel):
     citations: list[Citation] = Field(default_factory=list)
     disclaimer: str | None = None  # Required for L3 answers
     retry_count: int = Field(default=0, description="D-003: max 1 retry allowed")
+    action_type: ActionType | None = None
+    confidence_warning: str | None = None
