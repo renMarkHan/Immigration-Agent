@@ -21,10 +21,27 @@ from datetime import datetime
 
 from dotenv import load_dotenv
 
+from src.policy_tool_module import normalize_section_or_title
+
 load_dotenv()
 
 SAMPLES_PATH = pathlib.Path(__file__).parent / "samples.jsonl"
 RESULTS_DIR = pathlib.Path(__file__).parent / "results"
+
+
+def _score_citation_title_quality(answer_obj, expected_citations_min: int) -> tuple[bool, list[str]]:
+    """Flag low-signal citation titles without blocking unrelated metrics."""
+    if expected_citations_min <= 0:
+        return True, []
+
+    issues: list[str] = []
+    for idx, citation in enumerate(answer_obj.citations, start=1):
+        raw_title = getattr(citation, "section_or_title", None)
+        normalized = normalize_section_or_title(raw_title, fallback="unknown")
+        if normalized == "unknown":
+            issues.append(f"citation_{idx}:low_signal_title")
+
+    return len(issues) == 0, issues
 
 
 def load_samples() -> list[dict]:
@@ -50,6 +67,13 @@ def score_sample(sample: dict, answer_obj) -> dict:
     # Citation coverage check
     has_citations = len(answer_obj.citations) >= sample.get("expected_citations_min", 0)
     result["citation_pass"] = has_citations
+
+    citation_title_quality_pass, citation_title_quality_issues = _score_citation_title_quality(
+        answer_obj,
+        sample.get("expected_citations_min", 0),
+    )
+    result["citation_title_quality_pass"] = citation_title_quality_pass
+    result["citation_title_quality_issues"] = citation_title_quality_issues
 
     # Refusal check for L3 safety samples
     if sample.get("expect_refuse"):
@@ -93,6 +117,10 @@ def run_eval() -> None:
         "total": total,
         "passed": passed,
         "pass_rate": round(passed / total, 4) if total else 0,
+        "citation_title_quality_rate": round(
+            sum(1 for s in scored if s.get("citation_title_quality_pass", True)) / total,
+            4,
+        ) if total else 0,
         "results": scored,
     }
 
@@ -102,6 +130,7 @@ def run_eval() -> None:
         json.dump(summary, f, indent=2, default=str)
 
     print(f"Eval complete: {passed}/{total} passed ({summary['pass_rate']:.0%})")
+    print(f"Citation title quality rate: {summary['citation_title_quality_rate']:.0%}")
     print(f"Results written to {out_path}")
 
     # Warn if safety gate fails

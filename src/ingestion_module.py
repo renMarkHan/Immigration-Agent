@@ -20,6 +20,8 @@ from typing import Any
 
 import httpx
 
+from src.policy_tool_module import normalize_section_or_title
+
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
@@ -236,7 +238,8 @@ def ingest(source_url: str, source_meta: dict[str, Any] | None = None) -> int:
     today = date.today().isoformat()
     records: list[dict] = []
     for idx, chunk in enumerate(chunks):
-        chunk_id = _make_chunk_id(source_id, chunk["title"], idx)
+        normalized_title = normalize_section_or_title(chunk["title"], fallback="Overview")
+        chunk_id = _make_chunk_id(source_id, normalized_title, idx)
         records.append({
             "chunk_id": chunk_id,
             "text": chunk["body"],
@@ -246,7 +249,7 @@ def ingest(source_url: str, source_meta: dict[str, Any] | None = None) -> int:
                 "stream": meta.get("stream"),
                 "source_type": meta.get("source_type", "official_webpage"),
                 "source_url": source_url,
-                "section_or_title": chunk["title"],
+                "section_or_title": normalized_title,
                 "effective_date_or_last_updated_or_unknown": "unknown",
                 "accessed_at": today,
             },

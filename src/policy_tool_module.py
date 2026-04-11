@@ -75,6 +75,18 @@ def normalize_section_or_title(raw: str | None, fallback: str = "unknown") -> st
   if not raw:
     return fallback
   text = re.sub(r"\s+", " ", raw).strip(" -:\n\t")
+  lowered = text.lower()
+  low_signal_titles = {
+    "use the",
+    "apply for the",
+    "learn more",
+    "read more",
+    "click here",
+  }
+  if lowered in low_signal_titles:
+    return fallback
+  if len(text.split()) <= 3 and lowered.endswith((" the", " a", " an", " for", " to", " of", " in")):
+    return fallback
   return text or fallback
 
 

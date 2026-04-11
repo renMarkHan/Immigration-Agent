@@ -22,6 +22,7 @@ from typing import Any
 import chromadb
 from chromadb.api.models.Collection import Collection
 
+from src.policy_tool_module import normalize_section_or_title
 from src.schemas import RetrievalRequest, RetrievalResult
 
 # ---------------------------------------------------------------------------
@@ -100,7 +101,7 @@ class BM25Index:
 
         for doc in self.documents:
             text = doc.get("text", "")
-            section = str(doc.get("metadata", {}).get("section_or_title", ""))
+            section = normalize_section_or_title(doc.get("metadata", {}).get("section_or_title", ""))
             # Boost section title by including it twice
             tokens = _tokenize(text) + _tokenize(section) + _tokenize(section)
             freqs = Counter(tokens)
@@ -289,7 +290,7 @@ def _rerank_score(query: str, row: dict, hybrid_score: float) -> float:
     """Final reranker score combining hybrid rank + query coverage features."""
     query_tokens = set(_tokenize(query))
     text = str(row.get("text", ""))
-    section = str(row.get("metadata", {}).get("section_or_title", ""))
+    section = normalize_section_or_title(row.get("metadata", {}).get("section_or_title", ""))
     doc_tokens = set(_tokenize(text) + _tokenize(section))
 
     if not query_tokens:
@@ -378,6 +379,7 @@ def retrieve(request: RetrievalRequest) -> list[RetrievalResult]:
     for cid, score in selected:
         row = by_id[cid]
         md = row.get("metadata", {})
+        normalized_section = normalize_section_or_title(md.get("section_or_title"))
         results.append(
             RetrievalResult(
                 chunk_id=cid or "unknown",
@@ -386,7 +388,7 @@ def retrieve(request: RetrievalRequest) -> list[RetrievalResult]:
                 metadata=md,
                 citation={
                     "source_url": md.get("source_url", "unknown"),
-                    "section_or_title": md.get("section_or_title", "unknown"),
+                    "section_or_title": normalized_section,
                     "effective_date_or_last_updated_or_unknown": md.get(
                         "effective_date_or_last_updated_or_unknown", "unknown"
                     ),

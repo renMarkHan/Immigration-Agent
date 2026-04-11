@@ -111,6 +111,15 @@ Update (Execution):
 - Impact: Release criteria and daily iteration policy.
 - Verification: Gate pass report attached before demo freeze.
 
+Update (Execution):
+- Update Date: 2026-04-10
+- Change Summary: Added a citation-title-quality eval slice in `eval/run_eval.py` that flags low-signal `section_or_title` values using Role C normalization rules.
+- Why Changed: Citation field presence alone was not sufficient to measure citation usability; low-signal titles like truncated headings can still pass field-level checks.
+- Expected Impact: Better visibility into citation quality regressions and clearer quality targets for retrieval/ingestion cleanup.
+- Measured Result: Post-change eval reports `8/11 passed (73%)` and a `citation_title_quality_rate` of `91%`.
+- Follow-up Actions: Raise citation title quality toward parity with citation coverage and add targeted retrieval cleanup for remaining low-signal titles.
+- Owner: Yuhan Ren
+
 ### D-006 Team Execution Mode (Frozen)
 - Date: 2026-04-07
 - Owner: Yuhan Ren
@@ -154,6 +163,15 @@ Update (Execution):
 - Expected Impact: Prevent runtime integration errors when Role C tools begin returning `ToolResult` objects.
 - Measured Result: Targeted runtime check with `ToolResult(output=..., error=None)` and `ToolResult(output=None, error=...)` succeeds in `build_answer()` path.
 - Follow-up Actions: Remove temporary legacy field fallback once all modules are confirmed on canonical schema.
+- Owner: Yuhan Ren
+
+Update (Execution):
+- Update Date: 2026-04-10
+- Change Summary: Applied Role C citation title normalization to ingestion and retrieval output so `section_or_title` is cleaned before storage and before final citation rendering.
+- Why Changed: Retrieved citations included truncated low-signal headings such as `Use the` and `Apply for the`, reducing citation quality and readability.
+- Expected Impact: Cleaner citation titles and more stable section/title formatting across generated answers.
+- Measured Result: Focused Ontario retrieval check no longer returns `Apply for the` as a citation title; post-change eval remains 7/11 passed (64%) with no regression in citation field coverage.
+- Follow-up Actions: Add a citation-quality eval slice that flags low-signal section titles automatically.
 - Owner: Yuhan Ren
 
 ### D-008 Tool Scope for MVP (Frozen)
@@ -229,7 +247,9 @@ Copy and append this block under the relevant decision ID:
 - 2026-04-07: D-006 execution update added (interactive CLI path and handoff visibility upgrade).
 - 2026-04-07: D-004 execution update added (Ontario retrieval process demonstration path).
 - 2026-04-10: D-004 execution update added (Chroma vector retrieval + hybrid scoring + explicit reranker landed).
+- 2026-04-10: D-005 execution update added (citation title quality eval slice added).
 - 2026-04-10: D-003 execution update added (query text propagation into integrated risk/action routing).
 - 2026-04-10: D-007 execution update added (canonical ToolResult schema alignment in evidence formatting).
+- 2026-04-10: D-007 execution update added (citation title normalization applied in ingestion and retrieval).
 - 2026-04-10: D-008 execution update added (Federal EE CRS calculator and pathway backbone tool integrated).
 - 2026-04-10: D-010 execution update added (LLM path unified to project-standard client and env settings).
