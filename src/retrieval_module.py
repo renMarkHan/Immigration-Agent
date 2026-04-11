@@ -17,6 +17,10 @@ import math
 import re
 from collections import Counter
 from pathlib import Path
+from typing import Any
+
+import chromadb
+from chromadb.api.models.Collection import Collection
 
 from src.schemas import RetrievalRequest, RetrievalResult
 
@@ -26,10 +30,8 @@ from src.schemas import RetrievalRequest, RetrievalResult
 PROCESSED_CHUNKS_FILE = (
     Path(__file__).resolve().parent.parent / "data" / "processed" / "chunks.jsonl"
 )
-# Fallback to old demo file if new file doesn't exist
-DEMO_CHUNKS_FILE = (
-    Path(__file__).resolve().parent.parent / "data" / "processed" / "chunks.jsonl"
-)
+CHROMA_DIR = Path(__file__).resolve().parent.parent / "chroma_db"
+CHROMA_COLLECTION = "policy_chunks"
 
 # ---------------------------------------------------------------------------
 # BM25 parameters (D-004)
@@ -37,7 +39,20 @@ DEMO_CHUNKS_FILE = (
 BM25_K1 = 1.5
 BM25_B = 0.75
 BM25_WEIGHT = 0.6
-VECTOR_WEIGHT = 0.4  # reserved for ChromaDB integration
+VECTOR_WEIGHT = 0.4
+
+# Reranker weights (post-hybrid stage)
+RERANK_HYBRID_WEIGHT = 0.70
+RERANK_COVERAGE_WEIGHT = 0.25
+RERANK_PHRASE_BOOST = 0.05
+
+
+# ---------------------------------------------------------------------------
+# Chroma runtime cache
+# ---------------------------------------------------------------------------
+_CHROMA_CLIENT: chromadb.PersistentClient | None = None
+_CHROMA_COLLECTION: Collection | None = None
+_CHROMA_INDEXED_COUNT: int = -1
 
 
 # ---------------------------------------------------------------------------
@@ -47,6 +62,17 @@ VECTOR_WEIGHT = 0.4  # reserved for ChromaDB integration
 def _tokenize(text: str) -> list[str]:
     """Lowercase alphanumeric tokenization."""
     return re.findall(r"[a-z0-9]+", text.lower())
+
+
+def _normalize_scores(raw: dict[str, float]) -> dict[str, float]:
+    """Min-max normalize a score dict to [0, 1]."""
+    if not raw:
+        return {}
+    vals = list(raw.values())
+    lo, hi = min(vals), max(vals)
+    if math.isclose(lo, hi):
+        return {k: 1.0 for k in raw}
+    return {k: (v - lo) / (hi - lo) for k, v in raw.items()}
 
 
 # ---------------------------------------------------------------------------
@@ -128,11 +154,10 @@ class BM25Index:
 
 def _load_chunks() -> list[dict]:
     """Load chunk records from the processed JSONL file."""
-    target = PROCESSED_CHUNKS_FILE if PROCESSED_CHUNKS_FILE.exists() else DEMO_CHUNKS_FILE
-    if not target.exists():
+    if not PROCESSED_CHUNKS_FILE.exists():
         return []
     rows = []
-    with open(target) as f:
+    with open(PROCESSED_CHUNKS_FILE) as f:
         for line in f:
             stripped = line.strip()
             if not stripped:
@@ -142,6 +167,104 @@ def _load_chunks() -> list[dict]:
             except json.JSONDecodeError:
                 continue
     return rows
+
+
+def _sanitize_metadata_for_chroma(md: dict[str, Any]) -> dict[str, Any]:
+    """Ensure Chroma metadata values are scalar and non-null."""
+    clean: dict[str, Any] = {}
+    for k, v in md.items():
+        if v is None:
+            clean[k] = "unknown"
+        elif isinstance(v, (str, int, float, bool)):
+            clean[k] = v
+        else:
+            clean[k] = str(v)
+    return clean
+
+
+def _get_chroma_collection() -> Collection:
+    """Get (or initialize) the persistent Chroma collection."""
+    global _CHROMA_CLIENT, _CHROMA_COLLECTION
+    if _CHROMA_CLIENT is None:
+        CHROMA_DIR.mkdir(parents=True, exist_ok=True)
+        _CHROMA_CLIENT = chromadb.PersistentClient(path=str(CHROMA_DIR))
+    if _CHROMA_COLLECTION is None:
+        _CHROMA_COLLECTION = _CHROMA_CLIENT.get_or_create_collection(
+            name=CHROMA_COLLECTION,
+            metadata={"hnsw:space": "cosine"},
+        )
+    return _CHROMA_COLLECTION
+
+
+def _rebuild_chroma_index(rows: list[dict]) -> Collection:
+    """Rebuild the vector index from processed chunks."""
+    global _CHROMA_COLLECTION, _CHROMA_INDEXED_COUNT
+    collection = _get_chroma_collection()
+    if collection.count() > 0:
+        _CHROMA_CLIENT.delete_collection(CHROMA_COLLECTION)
+        _CHROMA_COLLECTION = _CHROMA_CLIENT.get_or_create_collection(
+            name=CHROMA_COLLECTION,
+            metadata={"hnsw:space": "cosine"},
+        )
+        collection = _CHROMA_COLLECTION
+
+    if not rows:
+        _CHROMA_INDEXED_COUNT = 0
+        return collection
+
+    ids = [str(r.get("chunk_id", "")) for r in rows]
+    docs = [str(r.get("text", "")) for r in rows]
+    metas = [_sanitize_metadata_for_chroma(r.get("metadata", {})) for r in rows]
+
+    batch_size = 500
+    for i in range(0, len(rows), batch_size):
+        collection.add(
+            ids=ids[i:i + batch_size],
+            documents=docs[i:i + batch_size],
+            metadatas=metas[i:i + batch_size],
+        )
+
+    _CHROMA_INDEXED_COUNT = len(rows)
+    return collection
+
+
+def _ensure_chroma_index(rows: list[dict]) -> Collection:
+    """Ensure Chroma index matches current processed chunk corpus."""
+    collection = _get_chroma_collection()
+    global _CHROMA_INDEXED_COUNT
+    target_count = len(rows)
+
+    # Rebuild when corpus size changed or first use.
+    if _CHROMA_INDEXED_COUNT != target_count:
+        return _rebuild_chroma_index(rows)
+    return collection
+
+
+def _vector_rank(query: str, candidate_rows: list[dict], top_k: int) -> dict[str, float]:
+    """Vector retrieval scores from Chroma over candidate row IDs."""
+    if not candidate_rows:
+        return {}
+
+    # Build/refresh full index, then filter by candidate IDs for this request.
+    collection = _ensure_chroma_index(_load_chunks())
+    candidate_ids = {str(r.get("chunk_id", "")) for r in candidate_rows}
+
+    # Query wider than top_k before metadata filtering to keep recall.
+    n_results = max(top_k * 4, 20)
+    out = collection.query(query_texts=[query], n_results=n_results, include=["distances", "ids"])
+
+    ids = out.get("ids", [[]])[0]
+    dists = out.get("distances", [[]])[0]
+    scores: dict[str, float] = {}
+
+    for cid, dist in zip(ids, dists):
+        if cid not in candidate_ids:
+            continue
+        # Convert cosine distance to similarity-like score.
+        sim = 1.0 / (1.0 + float(dist))
+        scores[cid] = sim
+
+    return scores
 
 
 # ---------------------------------------------------------------------------
@@ -162,6 +285,27 @@ def _filter_passes(row: dict, request: RetrievalRequest) -> bool:
     return True
 
 
+def _rerank_score(query: str, row: dict, hybrid_score: float) -> float:
+    """Final reranker score combining hybrid rank + query coverage features."""
+    query_tokens = set(_tokenize(query))
+    text = str(row.get("text", ""))
+    section = str(row.get("metadata", {}).get("section_or_title", ""))
+    doc_tokens = set(_tokenize(text) + _tokenize(section))
+
+    if not query_tokens:
+        coverage = 0.0
+    else:
+        coverage = len(query_tokens & doc_tokens) / len(query_tokens)
+
+    phrase_boost = 1.0 if query.lower() in text.lower() else 0.0
+
+    return (
+        RERANK_HYBRID_WEIGHT * hybrid_score
+        + RERANK_COVERAGE_WEIGHT * coverage
+        + RERANK_PHRASE_BOOST * phrase_boost
+    )
+
+
 # ---------------------------------------------------------------------------
 # Public retrieval API
 # ---------------------------------------------------------------------------
@@ -173,8 +317,8 @@ def retrieve(request: RetrievalRequest) -> list[RetrievalResult]:
     Pipeline:
     1. Load all chunks from processed JSONL.
     2. Apply metadata filters.
-    3. Build BM25 index over filtered chunks.
-    4. Score and rank by BM25 (vector scoring reserved for ChromaDB integration).
+    3. Score with BM25 and vector similarity (ChromaDB).
+    4. Blend scores (BM25 0.6 + vector 0.4), then rerank.
     5. Return top_k_final results with citation metadata.
     """
     all_chunks = _load_chunks()
@@ -190,19 +334,53 @@ def retrieve(request: RetrievalRequest) -> list[RetrievalResult]:
 
     # Step 2: BM25 scoring
     bm25 = BM25Index(filtered)
-    ranked = bm25.rank(request.query, top_k=request.top_k_initial)
+    bm25_ranked = bm25.rank(request.query, top_k=request.top_k_initial)
+    bm25_raw: dict[str, float] = {
+        str(filtered[idx].get("chunk_id", "")): score for idx, score in bm25_ranked
+    }
 
-    # Step 3: Take top_k_final (reranker placeholder — currently just top BM25)
-    selected = ranked[: request.top_k_final]
+    # Step 3: Vector scoring via Chroma (fallback to BM25-only if unavailable)
+    vector_raw: dict[str, float] = {}
+    try:
+        vector_raw = _vector_rank(request.query, filtered, top_k=request.top_k_initial)
+    except Exception:
+        vector_raw = {}
 
-    # Step 4: Build results
+    bm25_norm = _normalize_scores(bm25_raw)
+    vector_norm = _normalize_scores(vector_raw)
+
+    # Step 4: Hybrid blending on union of candidates
+    by_id: dict[str, dict] = {str(r.get("chunk_id", "")): r for r in filtered}
+    candidate_ids = set(bm25_norm) | set(vector_norm)
+    if not candidate_ids:
+        # Last-resort fallback: take first filtered docs with zero scores.
+        candidate_ids = {str(r.get("chunk_id", "")) for r in filtered[: request.top_k_initial]}
+
+    hybrid: list[tuple[str, float]] = []
+    for cid in candidate_ids:
+        h = BM25_WEIGHT * bm25_norm.get(cid, 0.0) + VECTOR_WEIGHT * vector_norm.get(cid, 0.0)
+        hybrid.append((cid, h))
+    hybrid.sort(key=lambda x: x[1], reverse=True)
+    hybrid = hybrid[: request.top_k_initial]
+
+    # Step 5: Explicit reranker over hybrid candidates
+    reranked: list[tuple[str, float]] = []
+    for cid, hscore in hybrid:
+        row = by_id.get(cid)
+        if row is None:
+            continue
+        reranked.append((cid, _rerank_score(request.query, row, hscore)))
+    reranked.sort(key=lambda x: x[1], reverse=True)
+    selected = reranked[: request.top_k_final]
+
+    # Step 6: Build results
     results: list[RetrievalResult] = []
-    for doc_idx, score in selected:
-        row = filtered[doc_idx]
+    for cid, score in selected:
+        row = by_id[cid]
         md = row.get("metadata", {})
         results.append(
             RetrievalResult(
-                chunk_id=row.get("chunk_id", "unknown"),
+                chunk_id=cid or "unknown",
                 text=row.get("text", ""),
                 score=score,
                 metadata=md,

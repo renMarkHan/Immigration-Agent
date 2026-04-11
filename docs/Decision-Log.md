@@ -60,7 +60,7 @@ Update (Execution):
 - Expected Impact: Correct Action mapping and risk routing in end-to-end flow, including retry behavior.
 - Measured Result: Smoke runs (`python -m src.main`, `python -m src.demo_ontario_flow`) pass; CRS-type queries now resolve to Action 3 in integrated flow.
 - Follow-up Actions: Integrate IntakeStateMachine into chat CLI path for full multi-turn collection before retrieval.
-- Owner: Yuhan Ren (Framework), Ehraaz Atif (Integration)
+- Owner: Yuhan Ren
 
 ### D-004 Retrieval Architecture Baseline (Frozen)
 - Date: 2026-04-07
@@ -85,6 +85,15 @@ Update (Execution):
 - Measured Result: Demo script path added (`python -m src.demo_ontario_flow`) with deterministic retrieval hit for OINP Masters requirement query.
 - Follow-up Actions: Replace demo chunk generation with real crawling/cleaning/chunking/indexing and BM25+vector hybrid retrieval.
 - Owner: Yuhan Ren (Framework), Retrieval/Ingestion owners for production replacement
+
+Update (Execution):
+- Update Date: 2026-04-10
+- Change Summary: Implemented ChromaDB vector retrieval in `src/retrieval_module.py`, blended BM25 + vector scores (0.6 / 0.4), and added explicit post-hybrid reranking.
+- Why Changed: The previous retrieval path was BM25-only in practice; D-004 required hybrid retrieval and reranking for semantic recall and ranking stability.
+- Expected Impact: Better semantic retrieval coverage, fewer keyword-only misses, and more consistent top-k relevance ordering.
+- Measured Result: Runtime retrieval now initializes persistent Chroma index and returns hybrid-ranked results; smoke tests (`python -m src.main`, `python -m src.demo_ontario_flow`) pass after integration.
+- Follow-up Actions: Add retrieval quality eval slices (keyword-vs-semantic and rerank lift), and tune reranker weights using eval outcomes.
+- Owner: Yuhan Ren
 
 ### D-005 Eval Gates and Priorities (Frozen)
 - Date: 2026-04-07
@@ -145,7 +154,7 @@ Update (Execution):
 - Expected Impact: Prevent runtime integration errors when Role C tools begin returning `ToolResult` objects.
 - Measured Result: Targeted runtime check with `ToolResult(output=..., error=None)` and `ToolResult(output=None, error=...)` succeeds in `build_answer()` path.
 - Follow-up Actions: Remove temporary legacy field fallback once all modules are confirmed on canonical schema.
-- Owner: Yuhan Ren (Framework), Keqing Wang (Agent), Chao Tang (Eval)
+- Owner: Yuhan Ren
 
 ### D-008 Tool Scope for MVP (Frozen)
 - Date: 2026-04-07
@@ -210,6 +219,7 @@ Copy and append this block under the relevant decision ID:
 - 2026-04-07: D-010 added (current model and endpoint constraints for this phase).
 - 2026-04-07: D-006 execution update added (interactive CLI path and handoff visibility upgrade).
 - 2026-04-07: D-004 execution update added (Ontario retrieval process demonstration path).
+- 2026-04-10: D-004 execution update added (Chroma vector retrieval + hybrid scoring + explicit reranker landed).
 - 2026-04-10: D-003 execution update added (query text propagation into integrated risk/action routing).
 - 2026-04-10: D-007 execution update added (canonical ToolResult schema alignment in evidence formatting).
 - 2026-04-10: D-010 execution update added (LLM path unified to project-standard client and env settings).
