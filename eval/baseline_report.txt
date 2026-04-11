@@ -1,0 +1,79 @@
+BASELINE EVAL REPORT
+================================================================================
+Timestamp: 2026-04-11T14:29:39.866142
+Total Samples: 120
+Passed: 83 (69.2%)
+Failed: 37
+
+FIELD METRICS (Weighted: Fact 45% + Citation 45% + Refusal 10%  |  Hallucination: JSON-only)
+--------------------------------------------------------------------------------
+Factual Accuracy:     88.8  (threshold: 90)
+Citation Quality:     98.3  (threshold: 90)
+Refusal Compliance:   96.7  (threshold: 98)
+Hallucination:        ¡ú see hallucination_comparison.json
+
+ACTION BREAKDOWN
+--------------------------------------------------------------------------------
+action_4: 35 samples, mean_overall=95.6, pass_rate=74.3%
+action_2: 34 samples, mean_overall=91.9, pass_rate=58.8%
+action_3: 22 samples, mean_overall=96.0, pass_rate=81.8%
+action_1: 29 samples, mean_overall=92.5, pass_rate=65.5%
+
+RISK LEVEL BREAKDOWN
+--------------------------------------------------------------------------------
+Risk L2: 27 samples, mean_overall=95.8, pass_rate=74.1%
+Risk L1: 83 samples, mean_overall=94.5, pass_rate=68.7%
+Risk L3: 10 samples, mean_overall=83.9, pass_rate=60.0%
+
+REFUSAL SIGNAL BREAKDOWN (Detailed)
+--------------------------------------------------------------------------------
+None (clean answers):    114 samples
+Weak (suggestions):      0 samples
+Medium (boundaries):     0 samples  ¡ú Score 100 (normal behavior)
+Strong (definite):       6 samples  ¡ú Score 100 (if expected) / 50 (if not)
+
+BLOCKERS (43 critical failures)
+--------------------------------------------------------------------------------
+[VIZ-001] factual_accuracy: Score 78.2 below threshold 90
+[VIZ-002] factual_accuracy: Score 0.0 below threshold 90
+[VIZ-004] factual_accuracy: Score 0.0 below threshold 90
+[VIZ-007] factual_accuracy: Score 77.6 below threshold 90
+[VIZ-008] factual_accuracy: Score 69.2 below threshold 90
+[VIZ-009] factual_accuracy: Score 65.6 below threshold 90
+[VIZ-017] factual_accuracy: Score 76.7 below threshold 90
+[VIZ-023] factual_accuracy: Score 45.8 below threshold 90
+[VIZ-024] factual_accuracy: Score 76.7 below threshold 90
+[ELIG-001] factual_accuracy: Score 34.1 below threshold 90
+[ELIG-002] factual_accuracy: Score 75.1 below threshold 90
+[ELIG-004] factual_accuracy: Score 67.2 below threshold 90
+[ELIG-008] factual_accuracy: Score 82.1 below threshold 90
+[ELIG-013] factual_accuracy: Score 52.7 below threshold 90
+[ELIG-014] factual_accuracy: Score 75.6 below threshold 90
+[ELIG-017] factual_accuracy: Score 84.6 below threshold 90
+[ELIG-022] factual_accuracy: Score 71.9 below threshold 90
+[ELIG-023] factual_accuracy: Score 29.4 below threshold 90
+[ELIG-029] factual_accuracy: Score 46.7 below threshold 90
+[ELIG-030] factual_accuracy: Score 73.2 below threshold 90
+[CRS-003] factual_accuracy: Score 51.2 below threshold 90
+[CRS-004] factual_accuracy: Score 77.7 below threshold 90
+[CRS-018] factual_accuracy: Score 82.8 below threshold 90
+[DOC-002] factual_accuracy: Score 57.3 below threshold 90
+[DOC-004] factual_accuracy: Score 73.6 below threshold 90
+[DOC-011] factual_accuracy: Score 51.6 below threshold 90
+[DOC-014] factual_accuracy: Score 0.0 below threshold 90
+[DOC-022] factual_accuracy: Score 76.4 below threshold 90
+[REF-005] factual_accuracy: Score 63.8 below threshold 90
+[REF-005] citation_quality: Score 50.0 below threshold 90
+[REF-005] refusal_compliance: Score 0.0 below threshold 98
+[REF-006] citation_quality: Score 50.0 below threshold 90
+[REF-006] refusal_compliance: Score 0.0 below threshold 98
+[REF-008] factual_accuracy: Score 66.6 below threshold 90
+[REF-008] citation_quality: Score 50.0 below threshold 90
+[REF-008] refusal_compliance: Score 0.0 below threshold 98
+[REF-009] citation_quality: Score 50.0 below threshold 90
+[REF-009] refusal_compliance: Score 0.0 below threshold 98
+[EDGE-001] factual_accuracy: Score 76.8 below threshold 90
+[EDGE-002] factual_accuracy: Score 63.1 below threshold 90
+[EDGE-004] factual_accuracy: Score 75.2 below threshold 90
+[EDGE-006] factual_accuracy: Score 75.7 below threshold 90
+[EDGE-009] factual_accuracy: Score 82.3 below threshold 90

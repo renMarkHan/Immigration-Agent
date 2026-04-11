@@ -1,0 +1,42 @@
+MANUAL HALLUCINATION AUDIT REPORT
+================================================================================
+Timestamp: 2026-04-11T18:47:12.384435
+Total Samples: 120
+Passed: 105 (87.5%)
+Failed: 15
+Hallucination Rate: 12.5%  (score < 75)
+Mean Hallucination Score: 86.0
+
+CRITERIA
+--------------------------------------------------------------------------------
+100: Clean. No clear hallucination or fabricated policy claim.
+75: Minor risk. Overgeneralization, incomplete grounding, or unsupported specificity, but no clear false core claim.
+50: Moderate hallucination. At least one material false, unsupported, or user-grounding-breaking claim.
+25: Significant hallucination. Core answer is materially wrong or clearly misattributes policy.
+0: Severe hallucination. Entire answer is substantially fabricated.
+
+BUCKET BREAKDOWN
+--------------------------------------------------------------------------------
+Clean:        70 samples
+Minor:        35 samples
+Moderate:     13 samples
+Significant:  2 samples
+Severe:       0 samples
+
+BLOCKERS
+--------------------------------------------------------------------------------
+[VIZ-010] hallucination_score: Manual audit score 25.0 below threshold 75; User asked about Manitoba options, but the answer presents Ontario pathways as substantive options. That is a core provincial-jurisdiction misattribution.
+[VIZ-016] hallucination_score: Manual audit score 50.0 below threshold 75; Claims the OINP PhD Graduate stream allows graduation within the last 5 years, which materially overstates the policy window.
+[VIZ-019] hallucination_score: Manual audit score 50.0 below threshold 75; User asked for British Columbia PR options, but the answer mostly redirects to Ontario and federal pathways instead of addressing BC PNP directly.
+[VIZ-023] hallucination_score: Manual audit score 50.0 below threshold 75; The question explicitly says the user has an Ontario employer willing to sponsor, but the answer marks job offer status as UNKNOWN and concludes likely not eligible.
+[ELIG-014] hallucination_score: Manual audit score 50.0 below threshold 75; It states the 12-month CEC requirement while simultaneously claiming the evidence does not support it, which materially misrepresents the policy certainty.
+[ELIG-016] hallucination_score: Manual audit score 50.0 below threshold 75; Claims Canadian work experience is effectively required for OINP Human Capital Priorities, which is an unsupported policy restriction.
+[ELIG-020] hallucination_score: Manual audit score 50.0 below threshold 75; Fails to state the expired-language-test rule clearly and instead frames it as unresolved despite the policy being materially clear.
+[ELIG-021] hallucination_score: Manual audit score 25.0 below threshold 75; Uses outdated NOC letter categories and gives the wrong eligible CEC occupation classes instead of TEER 0, 1, 2, and 3.
+[ELIG-023] hallucination_score: Manual audit score 50.0 below threshold 75; Incorrectly says FSW does not have a minimum point requirement and shifts the answer to CRS ranking, missing the 67-point selection-factor threshold.
+[ELIG-025] hallucination_score: Manual audit score 50.0 below threshold 75; States CLB 5 as the likely FSTP requirement while simultaneously saying the retrieved evidence does not confirm it, creating unsupported pseudo-certainty.
+[CRS-003] hallucination_score: Manual audit score 50.0 below threshold 75; Explicitly says a sibling in Canada adds no CRS points, which is a direct contradiction of the policy.
+[CRS-009] hallucination_score: Manual audit score 50.0 below threshold 75; Claims a theoretical 800 to 900 CRS maximum without provincial nomination, which materially overstates the score range.
+[CRS-010] hallucination_score: Manual audit score 50.0 below threshold 75; Says a Canadian master's degree typically earns only 25 CRS points, which materially understates the education contribution and answers the question incorrectly.
+[DOC-002] hallucination_score: Manual audit score 50.0 below threshold 75; Misstates accepted language tests by using NCLC as if it were a test and fails to correctly answer with the expected test names.
+[DOC-016] hallucination_score: Manual audit score 50.0 below threshold 75; Incorrectly says Express Entry profiles do not have a set expiration date. They expire after 12 months if not invited.
