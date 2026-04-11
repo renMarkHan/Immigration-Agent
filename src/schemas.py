@@ -64,12 +64,29 @@ class Citation(BaseModel):
 
 
 class IntakeProfile(BaseModel):
-    """Structured representation of what the user is asking about."""
-    query: str
+    """Structured representation of user query + intake profile (D-002)."""
+    query: str = ""
     province: str | None = None
     program: str | None = None   # e.g. "Express Entry", "PNP", "SUV"
     stream: str | None = None
     user_situation: str | None = None  # free-text context the user provides
+    # D-002 required intake fields
+    age_band: str | None = None
+    education_level: str | None = None
+    language_score: str | None = None
+    current_province: str | None = None
+    target_province: str | None = None
+    job_offer_status: str | None = None
+    graduation_date: str | None = None
+    canadian_work_months: int | None = None
+    # D-002 optional intake fields
+    noc_code: str | None = None
+    foreign_work_months: int | None = None
+    canadian_degree: str | None = None
+    second_language_score: str | None = None
+    spouse_education: str | None = None
+    spouse_language_score: str | None = None
+    spouse_canadian_work_months: int | None = None
 
 
 # ---------------------------------------------------------------------------

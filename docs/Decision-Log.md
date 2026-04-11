@@ -53,6 +53,15 @@ Purpose: Persistent record of planning and execution decisions for auditability 
 - Impact: State machine, prompt policy, refusal behavior.
 - Verification: 0 unresolved no-evidence loops in regression tests.
 
+Update (Execution):
+- Update Date: 2026-04-10
+- Change Summary: Orchestrator now passes `user_text=profile.query` into `route_risk()` and `build_answer()` on both first pass and retry pass.
+- Why Changed: Intent/risk routing in Role B depended on user text; without explicit propagation, routing degraded to default behavior in integration.
+- Expected Impact: Correct Action mapping and risk routing in end-to-end flow, including retry behavior.
+- Measured Result: Smoke runs (`python -m src.main`, `python -m src.demo_ontario_flow`) pass; CRS-type queries now resolve to Action 3 in integrated flow.
+- Follow-up Actions: Integrate IntakeStateMachine into chat CLI path for full multi-turn collection before retrieval.
+- Owner: Yuhan Ren (Framework), Ehraaz Atif (Integration)
+
 ### D-004 Retrieval Architecture Baseline (Frozen)
 - Date: 2026-04-07
 - Owner: Team (Data/Retrieval)
@@ -129,6 +138,15 @@ Update (Execution):
 - Impact: Citation format and citation correctness scoring.
 - Verification: 100% required citation fields in eval outputs.
 
+Update (Execution):
+- Update Date: 2026-04-10
+- Change Summary: Standardized tool evidence formatting to consume canonical `ToolResult` schema fields (`output`, `error`) and removed hard dependency on legacy Role B fields.
+- Why Changed: Agent evidence formatting previously expected non-canonical fields (`status`, `output_data`, `error_msg`) which conflicted with shared schema contracts.
+- Expected Impact: Prevent runtime integration errors when Role C tools begin returning `ToolResult` objects.
+- Measured Result: Targeted runtime check with `ToolResult(output=..., error=None)` and `ToolResult(output=None, error=...)` succeeds in `build_answer()` path.
+- Follow-up Actions: Remove temporary legacy field fallback once all modules are confirmed on canonical schema.
+- Owner: Yuhan Ren (Framework), Keqing Wang (Agent), Chao Tang (Eval)
+
 ### D-008 Tool Scope for MVP (Frozen)
 - Date: 2026-04-07
 - Owner: Policy/Tools
@@ -161,6 +179,15 @@ Update (Execution):
 - Impact: Model client integration, env configuration, and runtime assumptions.
 - Verification: Local scaffold can call health/inference path with configured endpoint and return a valid response.
 
+Update (Execution):
+- Update Date: 2026-04-10
+- Change Summary: Unified agent LLM invocation to use project-standard `src/llm_client.py` (`generate(...)`) and D-010 env settings (`LLM_ENDPOINT`, `LLM_API_KEY`, `LLM_MODEL`).
+- Why Changed: Role B module used a separate direct OpenAI client path and hardcoded model behavior, creating divergence from frozen runtime constraints.
+- Expected Impact: Single runtime path for all model calls, reducing configuration drift and integration ambiguity.
+- Measured Result: End-to-end flows run successfully after migration; no syntax or type errors in `src/agent_module.py`, `src/orchestrator.py`, `src/schemas.py`, `src/intake.py`.
+- Follow-up Actions: Move any remaining direct client calls in other modules to `llm_client.generate()` only.
+- Owner: Yuhan Ren (Framework)
+
 ---
 
 ## Execution Update Template
@@ -183,3 +210,6 @@ Copy and append this block under the relevant decision ID:
 - 2026-04-07: D-010 added (current model and endpoint constraints for this phase).
 - 2026-04-07: D-006 execution update added (interactive CLI path and handoff visibility upgrade).
 - 2026-04-07: D-004 execution update added (Ontario retrieval process demonstration path).
+- 2026-04-10: D-003 execution update added (query text propagation into integrated risk/action routing).
+- 2026-04-10: D-007 execution update added (canonical ToolResult schema alignment in evidence formatting).
+- 2026-04-10: D-010 execution update added (LLM path unified to project-standard client and env settings).

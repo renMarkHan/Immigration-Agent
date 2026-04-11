@@ -80,17 +80,19 @@ from src.agent.system_prompt import (
     get_system_prompt,
     get_l3_refusal,
 )
+from src.llm_client import generate
 
 
 # ---------------------------------------------------------------------------
-# Optional LLM client
+# LLM availability check (D-010 runtime settings)
 # ---------------------------------------------------------------------------
-import os
-try:
-    from openai import OpenAI as _OpenAI
-    _LLM_AVAILABLE = bool(os.environ.get("OPENAI_API_KEY"))
-except ImportError:
-    _LLM_AVAILABLE = False
+def _llm_configured() -> bool:
+    try:
+        import os
+
+        return bool(os.environ.get("LLM_API_KEY") and os.environ.get("LLM_ENDPOINT"))
+    except Exception:
+        return False
 
 
 # ===========================================================================
@@ -451,7 +453,7 @@ def build_answer(
     )
 
     # ── Step 5: Call LLM (or stub if unavailable) ────────────────────────────
-    if _LLM_AVAILABLE:
+    if _llm_configured():
         answer_text = _call_llm(user_turn)
     else:
         answer_text = _stub_answer(results, tool_results, intent)
@@ -498,25 +500,28 @@ def _format_evidence_block(
         )
 
     for j, t in enumerate(tool_results, 1):
-        if t.status == "success":
+        # Canonical ToolResult fields come from src/schemas.py: output + error.
+        # Keep one-cycle backwards compatibility for legacy fields from earlier Role B code.
+        output = t.output if hasattr(t, "output") else getattr(t, "output_data", None)
+        error = t.error if hasattr(t, "error") else getattr(t, "error_msg", None)
+
+        if error is None:
             lines.append(
                 f"[Tool Result {j}: {t.tool_name}]\n"
-                f"  Output: {json.dumps(t.output_data, indent=2)}"
+                f"  Output: {json.dumps(output, indent=2)}"
             )
         else:
             lines.append(
-                f"[Tool Result {j}: {t.tool_name} — {t.status.upper()}]\n"
-                f"  Error: {t.error_msg}"
+                f"[Tool Result {j}: {t.tool_name} — ERROR]\n"
+                f"  Error: {error}"
             )
 
     return "\n\n".join(lines) if lines else "(no evidence)"
 
 
 def _call_llm(user_turn: str) -> str:
-    """Call the LLM with the system prompt and assembled user turn."""
-    client = _OpenAI()
-    response = client.chat.completions.create(
-        model="gpt-4.1-mini",
+    """Call the project-standard LLM client (D-010 settings from .env)."""
+    return generate(
         messages=[
             {"role": "system", "content": get_system_prompt()},
             {"role": "user",   "content": user_turn},
@@ -524,7 +529,6 @@ def _call_llm(user_turn: str) -> str:
         temperature=0.1,
         max_tokens=1200,
     )
-    return response.choices[0].message.content.strip()
 
 
 def _stub_answer(
@@ -546,10 +550,11 @@ def _stub_answer(
         f"the key information is:\n\n{top.text}"
     )
 
-    if tool_results and tool_results[0].status == "success":
+    if tool_results and ((tool_results[0].error if hasattr(tool_results[0], "error") else getattr(tool_results[0], "error_msg", None)) is None):
+        output = tool_results[0].output if hasattr(tool_results[0], "output") else getattr(tool_results[0], "output_data", None)
         base += (
             f"\n\nTool result ({tool_results[0].tool_name}): "
-            f"{json.dumps(tool_results[0].output_data)}"
+            f"{json.dumps(output)}"
         )
 
     base += (

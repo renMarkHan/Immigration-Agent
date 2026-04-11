@@ -38,16 +38,28 @@ def run_pipeline(profile: IntakeProfile) -> FinalAnswer:
     # TODO (Ehraaz / Yuhan): detect tool intent from profile and call run_tool()
 
     # Step 3: Route risk level
-    risk_level = agent_module.route_risk(profile, results)
+    risk_level = agent_module.route_risk(profile, results, user_text=profile.query)
 
     # Step 4: D-003 retry logic — one retry if no evidence on first pass
-    answer = agent_module.build_answer(profile, results, tool_results, risk_level, retry_count=0)
+    answer = agent_module.build_answer(
+        profile,
+        results,
+        tool_results,
+        risk_level,
+        retry_count=0,
+        user_text=profile.query,
+    )
     if not results and answer.retry_count == 0:
         results = retrieval_module.retrieve(
             RetrievalRequest(query=profile.query)  # broader retry without filters
         )
         answer = agent_module.build_answer(
-            profile, results, tool_results, risk_level, retry_count=1
+            profile,
+            results,
+            tool_results,
+            risk_level,
+            retry_count=1,
+            user_text=profile.query,
         )
 
     return answer
