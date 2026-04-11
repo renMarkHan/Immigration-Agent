@@ -248,9 +248,9 @@ class IntakeCompleteness:
     confidence_warning: str  # empty string when mode == FULL_MATCHING
 
 
-def assess_completeness(profile: IntakeProfile) -> IntakeCompleteness:
+def assess_completeness(profile) -> IntakeCompleteness:
     """Evaluate the profile and return the D-002 operating mode."""
-    d = asdict(profile)
+    d = profile.model_dump() if hasattr(profile, 'model_dump') else asdict(profile)
     missing_req = [f for f in REQUIRED_FIELDS if d.get(f) is None]
     missing_opt = [f for f in OPTIONAL_FIELDS if d.get(f) is None]
     n = len(missing_req)
@@ -283,9 +283,9 @@ def assess_completeness(profile: IntakeProfile) -> IntakeCompleteness:
     )
 
 
-def profile_to_context(profile: IntakeProfile) -> str:
+def profile_to_context(profile) -> str:
     """Format the profile as a structured string for LLM context injection."""
-    d = asdict(profile)
+    d = profile.model_dump() if hasattr(profile, 'model_dump') else asdict(profile)
     lines = ["USER PROFILE:"]
     for f in REQUIRED_FIELDS:
         val = d.get(f)
