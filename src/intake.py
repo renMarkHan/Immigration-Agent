@@ -30,7 +30,6 @@ PUBLIC API
     ActionRoute       — ACTION_1 | ACTION_2 | ACTION_3 | ACTION_4
 
   Dataclasses
-    IntakeProfile     — 8 required + 7 optional user fields
     IntakeCompleteness — D-002 completeness result
     IntakeSession     — per-session conversation state
     IntakeTurnResult  — output of one dialog turn
@@ -52,9 +51,11 @@ from __future__ import annotations
 
 import re
 import uuid
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
+
+from src.schemas import IntakeProfile
 
 
 # ===========================================================================
@@ -97,43 +98,7 @@ class ActionRoute(str, Enum):
 # ===========================================================================
 # SECTION 2 — IntakeProfile Schema (D-002)
 # ===========================================================================
-
-@dataclass
-class IntakeProfile:
-    """Holds all collected user intake data.
-
-    Required fields (8 total, per D-002):
-      1. age_band              — age range bracket, e.g. "25-29"
-      2. education_level       — highest credential + where obtained
-      3. language_score        — test name + CLB-equivalent scores
-      4. current_province      — province currently residing in
-      5. target_province       — province intending to settle in
-      6. job_offer_status      — "yes" | "no" | "unknown"
-      7. graduation_date       — month + year, e.g. "2024-06"
-      8. canadian_work_months  — months of TEER 0/1/2/3 work in Canada
-
-    Optional fields (improve answer quality):
-      noc_code, foreign_work_months, canadian_degree,
-      second_language_score, spouse_education,
-      spouse_language_score, spouse_canadian_work_months
-    """
-    # ── Required (8) ────────────────────────────────────────────────────────
-    age_band: Optional[str]                    = None
-    education_level: Optional[str]             = None
-    language_score: Optional[str]              = None
-    current_province: Optional[str]            = None
-    target_province: Optional[str]             = None
-    job_offer_status: Optional[str]            = None
-    graduation_date: Optional[str]             = None
-    canadian_work_months: Optional[int]        = None
-    # ── Optional (7) ────────────────────────────────────────────────────────
-    noc_code: Optional[str]                    = None
-    foreign_work_months: Optional[int]         = None
-    canadian_degree: Optional[str]             = None
-    second_language_score: Optional[str]       = None
-    spouse_education: Optional[str]            = None
-    spouse_language_score: Optional[str]       = None
-    spouse_canadian_work_months: Optional[int] = None
+# Canonical IntakeProfile is defined in src/schemas.py.
 
 
 # Ordered list — collection priority order
@@ -224,7 +189,7 @@ _FIELD_META: dict[str, dict] = {
 
 def build_empty_profile() -> IntakeProfile:
     """Return a fresh IntakeProfile with all fields set to None."""
-    return IntakeProfile()
+    return IntakeProfile(query="")
 
 
 def update_profile(profile: IntakeProfile, extracted: dict) -> IntakeProfile:
@@ -248,9 +213,9 @@ class IntakeCompleteness:
     confidence_warning: str  # empty string when mode == FULL_MATCHING
 
 
-def assess_completeness(profile: IntakeProfile) -> IntakeCompleteness:
+def assess_completeness(profile) -> IntakeCompleteness:
     """Evaluate the profile and return the D-002 operating mode."""
-    d = asdict(profile)
+    d = profile.model_dump()
     missing_req = [f for f in REQUIRED_FIELDS if d.get(f) is None]
     missing_opt = [f for f in OPTIONAL_FIELDS if d.get(f) is None]
     n = len(missing_req)
@@ -283,9 +248,9 @@ def assess_completeness(profile: IntakeProfile) -> IntakeCompleteness:
     )
 
 
-def profile_to_context(profile: IntakeProfile) -> str:
+def profile_to_context(profile) -> str:
     """Format the profile as a structured string for LLM context injection."""
-    d = asdict(profile)
+    d = profile.model_dump()
     lines = ["USER PROFILE:"]
     for f in REQUIRED_FIELDS:
         val = d.get(f)
@@ -585,6 +550,10 @@ class IntakeStateMachine:
 # ===========================================================================
 # SECTION 6 — Field Extractor (rule-based stub)
 # ===========================================================================
+
+def extract_fields(user_text: str) -> dict:
+    """Public wrapper for rule-based field extraction from free-form text."""
+    return _extract_fields(user_text)
 
 def _extract_fields(user_text: str) -> dict:
     """Extract field values from free-form user text.
