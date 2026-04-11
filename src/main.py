@@ -33,7 +33,10 @@ def _test_mock_pipeline() -> None:
     from src.schemas import IntakeProfile
 
     profile = IntakeProfile(
-        query="What are the CRS score requirements for Federal Express Entry?",
+        query=(
+            "I am 27 years old with a Master's degree in Canada, IELTS 8 7 7 7, "
+            "and 12 months of Canadian skilled work experience. What is my CRS score?"
+        ),
         program="Express Entry",
     )
     answer = run_pipeline(profile)

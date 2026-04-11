@@ -551,6 +551,10 @@ class IntakeStateMachine:
 # SECTION 6 — Field Extractor (rule-based stub)
 # ===========================================================================
 
+def extract_fields(user_text: str) -> dict:
+    """Public wrapper for rule-based field extraction from free-form text."""
+    return _extract_fields(user_text)
+
 def _extract_fields(user_text: str) -> dict:
     """Extract field values from free-form user text.
 

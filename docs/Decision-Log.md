@@ -165,6 +165,15 @@ Update (Execution):
 - Impact: Tool implementation timeline and risk control.
 - Verification: Federal CRS path passes seed-tool tests.
 
+Update (Execution):
+- Update Date: 2026-04-10
+- Change Summary: Implemented Federal Express Entry CRS calculator in `src/policy_tool_module.py`, added Action 1 pathway backbone content, and integrated tool dispatch into `src/orchestrator.py` for calculator and visualize flows.
+- Why Changed: Role C deliverables were still stubbed, leaving calculator flows and pathway backbone content unavailable in integrated runs.
+- Expected Impact: Personalized CRS estimation now uses deterministic tool logic, and Action 1 flows receive a consistent static pathway scaffold.
+- Measured Result: Focused personalized CRS run returns Action 3 with tool-backed score output; `python -m src.main` smoke path passes with calculator integration.
+- Follow-up Actions: Expand calculator coverage beyond single-applicant Federal EE only after MVP and add more tool-specific eval seeds.
+- Owner: Yuhan Ren
+
 ### D-009 Demo Success Criteria (Frozen)
 - Date: 2026-04-07
 - Owner: Team
@@ -222,4 +231,5 @@ Copy and append this block under the relevant decision ID:
 - 2026-04-10: D-004 execution update added (Chroma vector retrieval + hybrid scoring + explicit reranker landed).
 - 2026-04-10: D-003 execution update added (query text propagation into integrated risk/action routing).
 - 2026-04-10: D-007 execution update added (canonical ToolResult schema alignment in evidence formatting).
+- 2026-04-10: D-008 execution update added (Federal EE CRS calculator and pathway backbone tool integrated).
 - 2026-04-10: D-010 execution update added (LLM path unified to project-standard client and env settings).

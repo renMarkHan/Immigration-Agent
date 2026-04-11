@@ -136,12 +136,12 @@ Completed now:
 - Minimal conversational CLI is available via `python -m src.chat_cli`.
 - Smoke runner remains available via `python -m src.main`.
 - Demonstrative Ontario retrieval flow is available via `python -m src.demo_ontario_flow`.
+- Real retrieval implementation is available with BM25 + vector + explicit rerank.
+- Role C policy tools are available for Federal EE CRS calculation and Action 1 pathway backbone support.
 
 Still pending before high-quality answers:
 - Real ingestion pipeline (scrape -> clean -> chunk -> index).
-- Real retrieval implementation (BM25 + vector + rerank + metadata filters).
-- Agent prompt/routing implementation with citation-grounded response synthesis.
-- Policy tool implementation (Federal EE CRS calculator for MVP scope).
+- Broader policy-tool coverage beyond Federal EE CRS single-applicant scope.
 
 How teammate AIs should interpret current phase:
 - This repo is now in "interactive scaffold" phase, not "production answer quality" phase.
