@@ -974,7 +974,7 @@ function appendAnswer(data) {
     <div class="msg-body" style="max-width:720px;width:100%;">
       <div class="answer-card">
         <div class="answer-meta">${metaBadges}</div>
-        <div class="answer-body">${escHtml(data.answer)}</div>
+        <div class="answer-body">${renderMarkdown(data.answer)}</div>
         ${warnHtml}
         ${retryHtml}
         ${citHtml}
@@ -1276,6 +1276,61 @@ async function checkStatus() {
 }
 
 window.addEventListener('DOMContentLoaded', checkStatus);
+
+/* ─── Light markdown renderer ───────────────────────────────── */
+function renderMarkdown(text) {
+  if (!text) return '';
+  let s = String(text);
+
+  // Escape HTML first (safety)
+  s = s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+  // Bold: **text** or __text__
+  s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/__(.+?)__/g, '<strong>$1</strong>');
+
+  // Italic: *text* or _text_  (single, not inside words)
+  s = s.replace(/(?<!\w)\*(?!\s)(.+?)(?<!\s)\*(?!\w)/g, '<em>$1</em>');
+
+  // Inline code
+  s = s.replace(/`([^`]+)`/g, '<code style="background:var(--cream-dk);padding:1px 5px;border-radius:3px;font-family:DM Mono,monospace;font-size:0.9em;">$1</code>');
+
+  // Process line by line for lists and paragraphs
+  const lines = s.split('\n');
+  const out = [];
+  let inList = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // Numbered list item: "1. text" or "1) text"
+    if (/^\d+[.)]\ /.test(trimmed)) {
+      if (!inList) { out.push('<ol style="margin:8px 0 8px 20px;line-height:1.8;">'); inList = 'ol'; }
+      else if (inList === 'ul') { out.push('</ul><ol style="margin:8px 0 8px 20px;line-height:1.8;">'); inList = 'ol'; }
+      out.push('<li>' + trimmed.replace(/^\d+[.)]\s+/, '') + '</li>');
+
+    // Bullet list item: "- text" or "• text"
+    } else if (/^[-•*]\s/.test(trimmed) && trimmed.length > 2) {
+      if (!inList) { out.push('<ul style="margin:8px 0 8px 20px;line-height:1.8;">'); inList = 'ul'; }
+      else if (inList === 'ol') { out.push('</ol><ul style="margin:8px 0 8px 20px;line-height:1.8;">'); inList = 'ul'; }
+      out.push('<li>' + trimmed.replace(/^[-•*]\s+/, '') + '</li>');
+
+    // Blank line: close any open list, add spacing
+    } else if (trimmed === '') {
+      if (inList) { out.push(inList === 'ol' ? '</ol>' : '</ul>'); inList = false; }
+      out.push('<div style="height:6px;"></div>');
+
+    // Regular line
+    } else {
+      if (inList) { out.push(inList === 'ol' ? '</ol>' : '</ul>'); inList = false; }
+      out.push('<span>' + line + '</span><br>');
+    }
+  }
+  if (inList) out.push(inList === 'ol' ? '</ol>' : '</ul>');
+
+  return out.join('\n');
+}
 </script>
 </body>
 </html>

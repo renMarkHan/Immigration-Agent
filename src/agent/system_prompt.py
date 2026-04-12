@@ -55,22 +55,14 @@ RISK_TIER_L1_CLARIFY_TEMPLATE: str = (
 # Embedded in the prompt so the LLM always knows the required output format.
 
 _CITATION_FORMAT_REMINDER: str = """
-CITATION FORMAT (MANDATORY — D-007):
-Every factual policy claim MUST be followed by a citation block.
-Output the citation as a JSON object on a new line, using exactly these keys:
-
-{
-  "source_url": "<full URL of the official page>",
-  "section_or_title": "<exact section heading or page title>",
-  "effective_date_or_last_updated_or_unknown": "<date string or 'unknown'>",
-  "accessed_at": "<ISO-8601 timestamp, e.g. 2026-04-08T09:00:00Z>"
-}
-
-Rules:
-- If the effective date is not published, use the page's last-updated date.
-- If neither date is available, set the value to the string "unknown".
-- NEVER omit or rename any of the four keys.
-- NEVER fabricate a URL or section title.
+CITATION POLICY (D-007):
+- Every key factual claim must reference its official source.
+- DO NOT output raw JSON citation objects in your answer text.
+- Instead, refer to sources naturally in prose, e.g.:
+    "According to the IRCC Express Entry page, ..."
+    "The OINP Masters Graduate Stream page states that ..."
+- The system will attach structured citation metadata automatically.
+- NEVER fabricate a URL, program name, or policy detail.
 """
 
 # ---------------------------------------------------------------------------
@@ -151,18 +143,17 @@ Out-of-scope topics (respond with a polite scope disclaimer):
 
 _OUTPUT_FORMAT: str = """
 OUTPUT FORMAT RULES:
-1. Begin with a direct, concise answer to the user's question.
-2. Follow with supporting details drawn exclusively from the CONTEXT block.
-3. After each key factual claim, insert the citation JSON block (see above).
-4. If multiple claims come from the same source, you may group citations at
-   the end of the paragraph, but each claim must still be traceable.
-5. End with a brief disclaimer: "This information is for general guidance
-   only and does not constitute legal advice.  Policy details may change;
-   always verify with the official source or an RCIC."
-6. Do NOT use markdown headers inside the answer body — use plain prose and
-   numbered lists only.
-7. Keep answers concise: aim for 150–300 words for factual queries,
-   300–500 words for eligibility matching.
+1. You will receive an ACTIVE ACTION block at the top of this prompt that
+   specifies exactly how to structure your response.  Follow it precisely.
+2. Draw all facts exclusively from the RETRIEVED POLICY EVIDENCE block in
+   the user turn.  Do NOT use your training knowledge for policy details.
+3. Reference sources naturally in prose ("According to the IRCC page...").
+   Do NOT output raw JSON objects anywhere in your response.
+4. Use markdown formatting: **bold** for key terms, numbered lists for
+   steps, bullet lists for requirements.  This renders properly in the UI.
+5. Do NOT add a disclaimer paragraph at the end — it is appended by the UI.
+6. Keep answers focused: 200–350 words for factual/CRS queries,
+   350–550 words for eligibility and pathway overviews.
 """
 
 # ---------------------------------------------------------------------------

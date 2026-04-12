@@ -231,6 +231,18 @@ def detect_intent(user_text: str) -> str:
         if kw in text_lower:
             return INTENT_CALCULATE
 
+    # ── visualize: pathway overview (check BEFORE match to avoid "my profile"
+    #    regex stealing pathway queries like "What pathways exist for my profile?")
+    visualize_keywords = [
+        "pathway", "pathways", "options", "routes", "ways to get pr",
+        "how to get pr", "what programs", "which programs", "overview",
+        "what streams", "which streams", "what can i apply",
+        "show me", "list", "compare",
+    ]
+    for kw in visualize_keywords:
+        if kw in text_lower:
+            return INTENT_VISUALIZE
+
     # ── qa: document checklist / factual Q&A ────────────────────────────────
     qa_keywords = [
         "document", "documents", "checklist", "what do i need",
@@ -257,18 +269,7 @@ def detect_intent(user_text: str) -> str:
         if re.search(pattern, user_text, re.IGNORECASE):
             return INTENT_MATCH
 
-    # ── visualize: pathway overview ──────────────────────────────────────────
-    visualize_keywords = [
-        "pathway", "pathways", "options", "routes", "ways to get pr",
-        "how to get pr", "what programs", "which programs", "overview",
-        "what streams", "which streams", "what can i apply",
-        "show me", "list", "compare",
-    ]
-    for kw in visualize_keywords:
-        if kw in text_lower:
-            return INTENT_VISUALIZE
-
-    # Default: eligibility match (most common user intent)
+    # Default: eligibility match
     return INTENT_MATCH
 
 
@@ -454,7 +455,7 @@ def build_answer(
 
     # ── Step 5: Call LLM (or stub if unavailable) ────────────────────────────
     if _llm_configured():
-        answer_text = _call_llm(user_turn)
+        answer_text = _call_llm(user_turn, intent=intent)
     else:
         answer_text = _stub_answer(results, tool_results, intent)
 
@@ -519,15 +520,46 @@ def _format_evidence_block(
     return "\n\n".join(lines) if lines else "(no evidence)"
 
 
-def _call_llm(user_turn: str) -> str:
-    """Call the project-standard LLM client (D-010 settings from .env)."""
+# Maps intent → plain-English action name injected into the system override
+_INTENT_ACTION_NAME: dict[str, str] = {
+    INTENT_VISUALIZE:  "ACTION 1 — Pathway Overview",
+    INTENT_MATCH:      "ACTION 2 — Eligibility Check",
+    INTENT_CALCULATE:  "ACTION 3 — CRS Score Calculation",
+    INTENT_QA:         "ACTION 4 — Document Checklist / Factual Q&A",
+}
+
+
+def _call_llm(user_turn: str, intent: str = INTENT_MATCH) -> str:
+    """Call the project-standard LLM client (D-010 settings from .env).
+
+    Injects an action-specific FORMAT OVERRIDE block at the top of the
+    system prompt so the LLM's generic output rules are superseded by the
+    action-specific structure requested for this turn.
+
+    max_tokens is set to 2048 to give qwen3 reasoning mode enough budget
+    to both think and produce a full differentiated response.
+    """
+    action_name = _INTENT_ACTION_NAME.get(intent, "ACTION 2 — Eligibility Check")
+    format_instructions = _ACTION_FORMAT.get(intent, _ACTION_FORMAT[INTENT_MATCH])
+
+    action_override = (
+        f"=== ACTIVE ACTION FOR THIS TURN: {action_name} ===\n"
+        f"You MUST structure your entire response according to these instructions "
+        f"and IGNORE the generic OUTPUT FORMAT RULES below for this turn:\n\n"
+        f"{format_instructions}\n\n"
+        f"This is the ONLY response format allowed for this turn.\n"
+        f"=========================================================\n\n"
+    )
+
+    system_content = action_override + get_system_prompt()
+
     return generate(
         messages=[
-            {"role": "system", "content": get_system_prompt()},
+            {"role": "system", "content": system_content},
             {"role": "user",   "content": user_turn},
         ],
         temperature=0.1,
-        max_tokens=1200,
+        max_tokens=2048,
     )
 
 

@@ -38,6 +38,48 @@ app = Flask(__name__, static_folder=str(WEB_DIR), static_url_path="")
 # In-memory session store
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Answer text cleaning
+# ---------------------------------------------------------------------------
+
+def _clean_answer_text(text: str) -> str:
+    """Strip LLM citation blocks and boilerplate from the answer body.
+
+    The LLM emits citations in two ways:
+      (a) single-line:  { "source_url": "...", ... }
+      (b) multi-line:   {
+                          "source_url": "...",
+                          ...
+                        }
+    Both are already in answer.citations[] and must be removed from prose.
+    Also strips [LOW CONFIDENCE] lines, the trailing disclaimer, and the
+    "Citations:" header the model sometimes inserts.
+    """
+    import re as _re
+
+    # Pass 1: remove any { ... } block containing "source_url" (handles both
+    # single-line and multi-line citation JSON emitted by the LLM).
+    text = _re.sub(r'\{[^{}]*?"source_url"[^{}]*?\}', '', text, flags=_re.DOTALL)
+
+    # Pass 2: line-by-line cleanup of leftover boilerplate
+    out, skip_blank = [], False
+    for line in text.split("\n"):
+        s = line.strip()
+        if s.startswith("[LOW CONFIDENCE]") or s.startswith("[DATA COLLECTION MODE]"):
+            skip_blank = True; continue
+        if _re.match(r"^citations\s*:?\s*$", s, _re.IGNORECASE):
+            skip_blank = True; continue
+        if s.startswith("This information is for general guidance only"):
+            skip_blank = True; continue
+        if s == "---":
+            skip_blank = True; continue
+        if s == "" and skip_blank:
+            skip_blank = False; continue
+        skip_blank = False
+        out.append(line)
+
+    return "\n".join(out).strip()
+
 class SessionStore:
     """Simple in-memory session store. Suitable for demo/MVP."""
 
@@ -51,7 +93,7 @@ class SessionStore:
         machine = IntakeStateMachine()
         session = machine.start_session()
         session_id = str(uuid.uuid4())
-        self._sessions[session_id] = {"machine": machine, "session": session}
+        self._sessions[session_id] = {"machine": machine, "session": session, "original_query": None}
         return session_id
 
     def get(self, session_id: str) -> dict | None:
@@ -146,6 +188,17 @@ def chat():
     session = data["session"]
 
     # ── Run intake turn ──────────────────────────────────────────────────────
+    # Save the very first user message as the original question.
+    # Intake answers ("No job offer", "I am 27") are not questions —
+    # routing detect_intent() on them gives the wrong action type.
+    if data["original_query"] is None:
+        data["original_query"] = message
+    
+    # Snapshot state BEFORE process_turn to detect the ready transition.
+    was_ready_before = session.state.value in (
+        "ready_to_match", "matching_done", "low_confidence_match"
+    )
+    
     turn = machine.process_turn(session, message)
 
     base = {
@@ -166,17 +219,18 @@ def chat():
     # ── Ready — run the full pipeline ────────────────────────────────────────
     try:
         from src.orchestrator import run_pipeline
-
-        # Propagate the current user message into the profile query so that
-        # detect_intent() and route_risk() in the pipeline operate on the
-        # actual question, not the empty default.  (profile.query is not a
-        # D-002 intake field so update_profile() never fills it.)
-        session.profile.query = message
+        # When the session just became ready, the triggering message was an
+        # intake answer ("I do not have a job offer"), not the actual question.
+        # Use the original question for the pipeline query in that case.
+        # On follow-up turns the session was already ready, so the current
+        # message IS the new question.
+        pipeline_query = message if was_ready_before else (data["original_query"] or message)
+        session.profile.query = pipeline_query
         answer = run_pipeline(session.profile)
 
         base["type"] = "answer"
         base["agent_message"] = turn.agent_message  # acknowledgment / transition msg
-        base["answer"] = answer.answer
+        base["answer"] = _clean_answer_text(answer.answer)
         base["risk_level"] = answer.risk_level.value
         base["action_type"] = answer.action_type.value if answer.action_type else None
         base["citations"] = [c.model_dump() for c in answer.citations]
