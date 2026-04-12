@@ -1,0 +1,80 @@
+# Role A (Data & Retrieval) Implementation Report
+
+**Date:** 2026-04-11  
+**Role:** Role A (Data & Retrieval)  
+**Assignee:** Ella Lu  
+
+---
+
+## Completed Tasks & Deliverables
+
+### 1. `src/ingestion_module.py`
+
+**Status:** Created & Fully Implemented.
+
+**Details:**
+- Built the end-to-end data ingestion pipeline that scrapes, cleans, chunks, and persists official immigration source documents.
+- **HTML Fetching:** Implemented `_fetch_page()` using `httpx` with polite request delays (1s), custom User-Agent, redirect following, and error handling.
+- **HTML Cleaning:** Implemented `_strip_html_tags()` and `_extract_main_content()` to extract the `<main>` or `<article>` body from raw HTML, strip all tags, collapse whitespace, and normalize HTML entities.
+- **Section-Based Chunking:** Implemented `_split_into_sections()` using header-detection heuristics (short lines, no trailing punctuation, not all lowercase, etc.) to split cleaned text into semantically meaningful sections. Implemented `_break_long_section()` to further split sections exceeding 1,500 characters on paragraph boundaries.
+- **Metadata Attachment:** Each chunk is enriched with structured metadata fields: `province`, `program`, `stream`, `source_type`, `source_url`, `section_or_title`, `effective_date_or_last_updated_or_unknown`, and `accessed_at`.
+- **Deduplication:** Uses deterministic chunk IDs (SHA-256 hash of source + section + part index) to skip already-persisted chunks on re-ingestion.
+- **Persistence:** Chunks are appended to `data/processed/chunks.jsonl` in JSONL format for downstream retrieval indexing.
+- **Batch Ingestion:** Implemented `ingest_all()` to process all entries from the URL registry with optional priority filtering (`P0`, `P1`, `P2`, or `all`).
+
+### 2. `src/retrieval_module.py`
+
+**Status:** Created & Fully Implemented.
+
+**Details:**
+- Implemented hybrid retrieval per frozen decision D-004.
+- **BM25 Scoring:** Built an in-memory `BM25Index` class with configurable k1=1.5, b=0.75 parameters. Section titles are boosted by including them twice during tokenization.
+- **Vector Retrieval:** Integrated ChromaDB as a persistent vector store (`chroma_db/` directory) with cosine similarity space. Implemented automatic index rebuilding when the chunk corpus changes.
+- **Hybrid Blending:** Combined BM25 (weight 0.6) and vector (weight 0.4) scores using min-max normalization on the union of candidate sets.
+- **Explicit Reranker:** Implemented a post-hybrid reranking stage combining hybrid score (0.70), query-term coverage (0.25), and exact phrase boost (0.05).
+- **Metadata Filtering:** Implemented `_filter_passes()` supporting filters on `province`, `program`, `stream`, and `source_type` per D-004, with fallback to unfiltered results when filters are too restrictive.
+- **Citation Output:** Each `RetrievalResult` includes a `citation` dict with `source_url`, `section_or_title` (normalized via Role C's `normalize_section_or_title`), `effective_date_or_last_updated_or_unknown`, and `accessed_at` per D-007.
+
+### 3. `data/sources/url_registry.json`
+
+**Status:** Created & Expanded.
+
+**Details:**
+- Curated a URL registry of 45 official government sources covering:
+  - **IRCC (Federal):** Express Entry overview, FSW, CEC, FST, CRS criteria, language requirements, ECA, processing times, proof of funds, police certificates, job offers, NOC, PR status, settlement guides, and more.
+  - **OINP (Ontario):** Homepage, Human Capital Priorities, Masters Graduate, PhD Graduate, International Student, Foreign Worker, and Streams Overview.
+  - **Other Provinces (P2):** BC PNP overview and Skills Immigration, Alberta AAIP, Manitoba MPNP.
+- Each entry includes: `id`, `page`, `url`, `priority` (P0/P1/P2), `province`, `program`, `stream`, `source_type`, `verified`, and `verified_at`.
+- All URLs verified as accessible on 2026-04-09.
+
+### 4. `data/processed/chunks.jsonl`
+
+**Status:** Generated & Updated.
+
+**Details:**
+- Phase 1 (Apr 8): Ingested 11 P0 sources, producing 533 chunks.
+- Phase 2 (Apr 9): Expanded to all 43 scrapable sources (P0 + P1 + P2), significantly expanding the chunk corpus.
+- Each chunk record contains: `chunk_id`, `text`, and `metadata` (province, program, stream, source_type, source_url, section_or_title, effective_date_or_last_updated_or_unknown, accessed_at).
+
+### 5. `data/raw/` (Raw HTML Archive)
+
+**Status:** Complete.
+
+**Details:**
+- Stored raw HTML files for all 43 scraped sources, enabling reproducible re-ingestion and audit.
+- File naming convention: `{source_id}.html` (e.g., `ircc-homepage.html`, `oinp-masters.html`).
+
+
+---
+
+## Design Decisions Followed
+
+- **D-004 (Retrieval Architecture):** Hybrid BM25 (0.6) + Vector (0.4), initial top-k=20, reranked to final top-k=5, with metadata filters.
+- **D-007 (Citation Field Policy):** Every chunk and retrieval result includes source_url, section_or_title, effective_date_or_last_updated_or_unknown, and accessed_at.
+- **D-005 (Eval Gates):** Citation field coverage integrated into eval pipeline; section titles normalized to improve citation quality.
+
+---
+
+## Summary
+
+Role A's data and retrieval pipeline is fully implemented and operational. The system can ingest official IRCC and OINP webpages, clean and chunk the content with metadata enrichment, persist to JSONL, index into ChromaDB for vector search, and serve hybrid-ranked retrieval results with citation-grounded metadata. The knowledge base covers 43 scrapable official sources across Federal Express Entry, OINP, and select provincial programs.
