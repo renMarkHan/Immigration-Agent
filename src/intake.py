@@ -574,8 +574,16 @@ def _extract_fields(user_text: str) -> dict:
 
 
 def _extract_fields_llm(user_text: str) -> dict | None:
-    """LLM-based field extractor. Returns None if LLM unavailable or fails."""
+    """LLM-based extractor. Returns None if LLM unavailable or output unparseable.
+
+    Fixes:
+    - Strips <think>...</think> reasoning tokens (qwen3 emits these)
+    - Uses regex search for the JSON object so preamble prose doesn't break parse
+    - max_tokens=512 to fit all 8 fields plus model reasoning budget
+    - Any parse failure returns None cleanly, falling through to regex
+    """
     import json as _json
+    import re as _re
     import os as _os
 
     if not (_os.environ.get("LLM_API_KEY") and _os.environ.get("LLM_ENDPOINT")):
@@ -584,70 +592,71 @@ def _extract_fields_llm(user_text: str) -> dict | None:
     try:
         from src.llm_client import generate
 
-        EXTRACTION_PROMPT = """You are a field extractor for a Canadian immigration intake form.
-Extract ONLY the fields the user explicitly states. Do NOT infer or guess missing fields.
-Do NOT extract fields the user did not mention. Return ONLY valid JSON, no other text.
-
-Fields to extract (all optional — only include what the user explicitly states):
-- age_band: one of "18-24", "25-29", "30-34", "35-39", "40-44", "45+"
-- education_level: e.g. "Master's, Canada" / "Bachelor's" / "Doctorate, Canada" / "Diploma"
-  Append ", Canada" only if the user explicitly says the degree was obtained in Canada.
-- language_score: raw text of what the user said about their language test scores
-- current_province: Canadian province name ONLY — if the user mentions any non-Canadian
-  location (e.g. New York, USA, any US state/city), do NOT extract current_province
-- target_province: Canadian province name ONLY — same rule as current_province
-- job_offer_status: "yes", "no", or "unknown"
-- graduation_date: e.g. "June 2024" or "2024-06"
-- canadian_work_months: integer (months of skilled work experience IN Canada)
-- noc_code: NOC code string if mentioned
-- foreign_work_months: integer (months of skilled work outside Canada)
-
-CRITICAL RULES:
-- Only extract fields explicitly mentioned. No inference.
-- current_province and target_province MUST be Canadian provinces. Never set them
-  to a US state, city, or any non-Canadian location.
-- If the user says they live outside Canada, omit current_province entirely.
-- Return {} if nothing clear is stated.
-
-User message: """ + _json.dumps(user_text) + """
-
-Return JSON only:"""
+        prompt = (
+            "Extract intake profile fields from the user message below.\n"
+            "Return ONLY a JSON object. No explanation, no markdown, no preamble.\n\n"
+            "Fields (include only what the user explicitly states):\n"
+            "  age_band          : one of 18-24, 25-29, 30-34, 35-39, 40-44, 45+\n"
+            "  education_level   : e.g. \"Master's, Canada\" or \"Bachelor's\"\n"
+            "                      Append ', Canada' only if degree was obtained in Canada\n"
+            "  language_score    : verbatim text of language test scores\n"
+            "  current_province  : Canadian province name only (omit if user is outside Canada)\n"
+            "  target_province   : Canadian province name only (omit if user is outside Canada)\n"
+            "  job_offer_status  : yes | no | unknown\n"
+            "  graduation_date   : e.g. June 2024\n"
+            "  canadian_work_months : integer, months of skilled work IN Canada\n"
+            "  noc_code          : NOC code string if mentioned\n"
+            "  foreign_work_months  : integer, months of skilled work outside Canada\n\n"
+            "Rules:\n"
+            "  - current_province and target_province must be Canadian provinces only.\n"
+            "  - Return {} if no intake fields are present.\n\n"
+            "User message: " + _json.dumps(user_text) + "\n\nJSON:"
+        )
 
         raw = generate(
-            messages=[{"role": "user", "content": EXTRACTION_PROMPT}],
-            max_tokens=256,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=512,
             temperature=0.0,
         )
 
-        # Strip markdown code fences if present
-        raw = raw.strip()
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-        raw = raw.strip()
+        if not raw:
+            return None
 
-        extracted = _json.loads(raw)
+        # Strip <think>...</think> reasoning tokens emitted by qwen3
+        raw = _re.sub(r"<think>.*?</think>", "", raw, flags=_re.DOTALL).strip()
+
+        # Strip markdown fences if the model ignored the instruction
+        if raw.startswith("```"):
+            parts = raw.split("```")
+            for part in parts:
+                part = part.strip()
+                if part.startswith("json"):
+                    part = part[4:].strip()
+                if part.startswith("{"):
+                    raw = part
+                    break
+
+        # Find the JSON object (tolerates leading/trailing prose)
+        m = _re.search(r"\{.*\}", raw, _re.DOTALL)
+        if not m:
+            return None
+
+        extracted = _json.loads(m.group())
         if not isinstance(extracted, dict):
             return None
 
-        # Validate and sanitise each field
+        # Validate and sanitise
         cleaned: dict = {}
 
-        # age_band
-        valid_bands = {"18-24", "25-29", "30-34", "35-39", "40-44", "45+"}
-        if extracted.get("age_band") in valid_bands:
+        if extracted.get("age_band") in {"18-24","25-29","30-34","35-39","40-44","45+"}:
             cleaned["age_band"] = extracted["age_band"]
 
-        # education_level — basic sanity check
         if isinstance(extracted.get("education_level"), str) and len(extracted["education_level"]) < 80:
             cleaned["education_level"] = extracted["education_level"]
 
-        # language_score
         if isinstance(extracted.get("language_score"), str) and len(extracted["language_score"]) < 200:
             cleaned["language_score"] = extracted["language_score"]
 
-        # Provinces — whitelist to prevent US locations bleeding in
         VALID_PROVINCES = {
             "Ontario", "British Columbia", "Alberta", "Quebec", "Manitoba",
             "Saskatchewan", "Nova Scotia", "New Brunswick",
@@ -655,34 +664,30 @@ Return JSON only:"""
             "Northwest Territories", "Yukon", "Nunavut",
         }
         for field in ("current_province", "target_province"):
-            val = extracted.get(field)
-            if val in VALID_PROVINCES:
-                cleaned[field] = val
+            if extracted.get(field) in VALID_PROVINCES:
+                cleaned[field] = extracted[field]
 
-        # job_offer_status
         if extracted.get("job_offer_status") in {"yes", "no", "unknown"}:
             cleaned["job_offer_status"] = extracted["job_offer_status"]
 
-        # graduation_date
         if isinstance(extracted.get("graduation_date"), str) and len(extracted["graduation_date"]) < 30:
             cleaned["graduation_date"] = extracted["graduation_date"]
 
-        # canadian_work_months
-        if isinstance(extracted.get("canadian_work_months"), int):
-            cleaned["canadian_work_months"] = extracted["canadian_work_months"]
+        cwm = extracted.get("canadian_work_months")
+        if isinstance(cwm, (int, float)):
+            cleaned["canadian_work_months"] = int(cwm)
 
-        # noc_code
         if isinstance(extracted.get("noc_code"), str) and len(extracted["noc_code"]) < 20:
             cleaned["noc_code"] = extracted["noc_code"]
 
-        # foreign_work_months
-        if isinstance(extracted.get("foreign_work_months"), int):
-            cleaned["foreign_work_months"] = extracted["foreign_work_months"]
+        fwm = extracted.get("foreign_work_months")
+        if isinstance(fwm, (int, float)):
+            cleaned["foreign_work_months"] = int(fwm)
 
         return cleaned
 
     except Exception:
-        return None  # fall through to regex
+        return None  # always fall through to regex on any failure
 
 
 def _extract_fields_regex(user_text: str) -> dict:
