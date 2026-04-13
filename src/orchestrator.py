@@ -20,10 +20,14 @@ from src.intake import extract_fields, update_profile
 from src.schemas import FinalAnswer, IntakeProfile, RetrievalRequest, ToolRequest
 
 
-def run_pipeline(profile: IntakeProfile) -> FinalAnswer:
+def run_pipeline(profile: IntakeProfile, conv_history: list[dict] | None = None) -> FinalAnswer:
     """
     Run the full RAG pipeline for a user query.
     Returns a FinalAnswer with citations.
+
+    conv_history: list of {"role": "user"|"assistant", "content": str} from
+    previous turns in this session. Injected into the LLM prompt so the model
+    can refer back to earlier exchanges (same as Claude/ChatGPT behaviour).
     """
     # Step 0: Enrich profile from free-text query for downstream routing/tools.
     working_profile = profile.model_copy(deep=True)
@@ -48,26 +52,19 @@ def run_pipeline(profile: IntakeProfile) -> FinalAnswer:
             intent_scores=intent_scores,
             intent_top2=intent_top2,
             intent_ambiguous=intent_ambiguous,
+            conv_history=conv_history,
         )
 
+    # When intent is ambiguous, don't refuse — proceed with the top-ranked intent
+    # and surface a soft warning in the response. Hard refusals block the user when
+    # they have sent profile-info follow-ups ("I'm 27 years old") that shouldn't
+    # have reached the pipeline in the first place (fixed in app.py).
+    ambiguity_warning = ""
     if intent_ambiguous:
-        return FinalAnswer(
-            answer=agent_module.build_intent_clarification(intent_top2),
-            risk_level=agent_module.RiskLevel.L1,
-            action_type=agent_module.ActionType.ACTION_4,
-            confidence_warning="Intent unclear. Please choose one task so I can be precise.",
-            citations=[],
-            no_evidence_action=agent_module.NoEvidenceAction.CITE_GAP,
-            retry_count=0,
-            intent_scores=intent_scores,
-            intent_top2=intent_top2,
-            intent_ambiguous=True,
-            risk_explain={
-                "decision": "L1",
-                "steps": [
-                    {"gate": "intent_ambiguity", "triggered": True, "intent_top2": intent_top2}
-                ],
-            },
+        ambiguity_warning = (
+            f"Your request was a little ambiguous — "
+            f"I interpreted it as a {agent_module.build_intent_clarification(intent_top2).split('Do you want')[0].strip()} "
+            f"and answered accordingly. If this isn't what you meant, please rephrase."
         )
 
     # Step 2: Retrieve relevant chunks (intent-aware filtering).
@@ -125,6 +122,7 @@ def run_pipeline(profile: IntakeProfile) -> FinalAnswer:
         intent_scores=intent_scores,
         intent_top2=intent_top2,
         intent_ambiguous=intent_ambiguous,
+        conv_history=conv_history,
     )
     if not results and answer.retry_count == 0:
         results = retrieval_module.retrieve(
@@ -146,6 +144,11 @@ def run_pipeline(profile: IntakeProfile) -> FinalAnswer:
             intent_scores=intent_scores,
             intent_top2=intent_top2,
             intent_ambiguous=intent_ambiguous,
+            conv_history=conv_history,
         )
+
+    # Attach ambiguity note as a soft warning (does not replace the answer)
+    if ambiguity_warning and not answer.confidence_warning:
+        answer = answer.model_copy(update={"confidence_warning": ambiguity_warning})
 
     return answer

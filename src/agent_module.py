@@ -230,8 +230,91 @@ def _normalize_intent_scores(score: dict[str, float]) -> dict[str, float]:
     return {k: max(v, 0.0) / total for k, v in score.items()}
 
 
+# Cache only successful LLM classifications; failures are never stored so they
+# can be retried next call (e.g. transient network error, slow warmup).
+_intent_llm_cache: dict[str, tuple[str, float]] = {}
+
+
+def _classify_intent_llm(user_text: str) -> tuple[str, float] | None:
+    """LLM zero-shot intent classification — semantically far more robust than
+    keyword matching, handles paraphrase, implicit intent, and negation.
+
+    Returns (intent_label, confidence 0.50-1.0) on success, None on failure
+    so the caller can fall back to keyword scoring seamlessly.
+    """
+    if not _llm_configured():
+        return None
+
+    if user_text in _intent_llm_cache:
+        return _intent_llm_cache[user_text]
+
+    PROMPT = (
+        "You are an intent classifier for a Canada permanent-residency assistant.\n"
+        "Classify the USER MESSAGE into exactly one intent label:\n\n"
+        "  visualize  — user wants to explore the overall immigration landscape: "
+        "all programs, pathways, routes, or options as a system; structural or "
+        "exploratory questions (e.g. 'what are all the ways to get PR?', 'show me "
+        "the immigration map', 'what options exist in Canada?').\n\n"
+        "  match      — user asks whether they personally are eligible for a specific "
+        "program or stream (e.g. 'am I eligible for OINP?', 'can I apply for CEC with "
+        "my profile?').\n\n"
+        "  calculate  — user wants a CRS score calculated or estimated "
+        "(e.g. 'what is my CRS score?', 'how many points do I have?').\n\n"
+        "  qa         — user wants a specific factual answer: documents, rules, "
+        "thresholds, timelines, how a process works, or a yes/no policy question "
+        "(e.g. 'what documents do I need?', 'what is the minimum CLB for FSW?').\n\n"
+        "  general    — user asks about recent news or policy changes "
+        "(e.g. 'latest Express Entry draws', 'any recent immigration policy updates?').\n\n"
+        f'USER MESSAGE: "{user_text[:400]}"\n\n'
+        "Reply with JSON only — no explanation, no markdown:\n"
+        '{"intent": "qa", "confidence": 0.92}'
+    )
+    try:
+        raw = generate(
+            [{"role": "user", "content": PROMPT}],
+            max_tokens=48,
+            temperature=0.0,
+        )
+        m = re.search(r'\{[^}]*"intent"\s*:[^}]+\}', raw)
+        if not m:
+            return None
+        data = json.loads(m.group())
+        intent = str(data.get("intent", "")).strip().lower()
+        confidence = float(data.get("confidence", 0.75))
+        valid = {INTENT_VISUALIZE, INTENT_MATCH, INTENT_CALCULATE, INTENT_QA, INTENT_GENERAL}
+        if intent not in valid:
+            return None
+        result = (intent, max(0.50, min(1.0, confidence)))
+        _intent_llm_cache[user_text] = result  # cache only on success
+        return result
+    except Exception:
+        return None
+
+
 def detect_intent_with_confidence(user_text: str) -> tuple[str, dict[str, float], list[str], bool]:
-    """Return winner intent + normalized scores + top2 + ambiguity flag."""
+    """Return winner intent + normalized scores + top2 + ambiguity flag.
+
+    Uses LLM-based zero-shot classification as the primary strategy (semantically
+    robust, handles paraphrase and implicit intent), falling back to weighted
+    keyword scoring when the LLM is unavailable.
+    """
+    # ── Primary: LLM zero-shot classification ─────────────────────────────
+    llm_result = _classify_intent_llm(user_text)
+    if llm_result is not None:
+        intent, confidence = llm_result
+        all_intents = [INTENT_VISUALIZE, INTENT_MATCH, INTENT_CALCULATE, INTENT_QA, INTENT_GENERAL]
+        others = [k for k in all_intents if k != intent]
+        remaining = max(0.0, 1.0 - confidence)
+        scores: dict[str, float] = {k: remaining / len(others) for k in others}
+        scores[intent] = confidence
+        total = sum(scores.values())
+        norm = {k: v / total for k, v in scores.items()}
+        ranked = sorted(norm.items(), key=lambda x: x[1], reverse=True)
+        top2 = [x[0] for x in ranked[:2]]
+        ambiguous = confidence < 0.65 and (ranked[0][1] - ranked[1][1]) < 0.20
+        return ranked[0][0], norm, top2, ambiguous
+
+    # ── Fallback: weighted keyword scoring ────────────────────────────────
     text_lower = user_text.lower().strip()
     tokens = re.findall(r"[a-z0-9]+", text_lower)
 
@@ -519,6 +602,7 @@ def build_answer(
     intent_scores: dict[str, float] | None = None,
     intent_top2: list[str] | None = None,
     intent_ambiguous: bool = False,
+    conv_history: list[dict] | None = None,
 ) -> FinalAnswer:
     """Construct LLM prompt, call LLM, parse and return FinalAnswer.
 
@@ -642,7 +726,12 @@ def build_answer(
 
     # ── Step 5: Call LLM (or stub if unavailable) ────────────────────────────
     if _llm_configured():
-        answer_text = _call_llm(user_turn, intent=intent, format_override=format_instructions)
+        answer_text = _call_llm(
+            user_turn,
+            intent=intent,
+            format_override=format_instructions,
+            conv_history=conv_history,
+        )
     else:
         answer_text = _stub_answer(results, tool_results, intent)
 
@@ -721,20 +810,26 @@ _INTENT_ACTION_NAME: dict[str, str] = {
 }
 
 
-def _call_llm(user_turn: str, intent: str = INTENT_MATCH, format_override: str | None = None) -> str:
+def _call_llm(
+    user_turn: str,
+    intent: str = INTENT_MATCH,
+    format_override: str | None = None,
+    conv_history: list[dict] | None = None,
+) -> str:
     """Call the project-standard LLM client (D-010 settings from .env).
 
     Injects an action-specific FORMAT OVERRIDE block at the top of the
     system prompt so the LLM's generic output rules are superseded by the
     action-specific structure requested for this turn.
 
-    max_tokens is set to 2048 to give qwen3 reasoning mode enough budget
-    to both think and produce a full differentiated response.
-
-    Args:
-        format_override: When provided, use this format string instead of the
-            default _ACTION_FORMAT lookup (used for QA sub-type selection).
+    conv_history: prior turns as [{"role": "user"|"assistant", "content": str}].
+    The last N turns are prepended before the current user_turn so the LLM
+    has the same conversational awareness as Claude/ChatGPT.  History is
+    capped at MAX_HISTORY_TURNS (8 messages = 4 exchanges) to stay within
+    the context budget.
     """
+    MAX_HISTORY_TURNS = 8   # 4 user + 4 assistant messages maximum
+
     action_name = _INTENT_ACTION_NAME.get(intent, "ACTION 2 — Eligibility Check")
     format_instructions = format_override if format_override is not None else _ACTION_FORMAT.get(intent, _ACTION_FORMAT[INTENT_MATCH])
 
@@ -743,17 +838,31 @@ def _call_llm(user_turn: str, intent: str = INTENT_MATCH, format_override: str |
         f"You MUST structure your entire response according to these instructions "
         f"and IGNORE the generic OUTPUT FORMAT RULES below for this turn:\n\n"
         f"{format_instructions}\n\n"
+        f"CRITICAL FORMATTING RULES (always apply):\n"
+        f"- Write list items consecutively with NO blank lines between them.\n"
+        f"- Never add a blank line after a bold heading or before a list.\n"
+        f"- Keep each list item on a single line — no multi-line items.\n"
+        f"- Use **bold text** inline for emphasis, not as standalone heading lines.\n"
+        f"- Aim for 150–400 words total. Be direct and concise.\n\n"
         f"This is the ONLY response format allowed for this turn.\n"
         f"=========================================================\n\n"
     )
 
     system_content = action_override + get_system_prompt()
 
+    # Build messages: system → [trimmed history] → current user turn
+    messages: list[dict] = [{"role": "system", "content": system_content}]
+
+    # Exclude the very last user message from history (it is user_turn itself)
+    history = (conv_history or [])[:-1]
+    if history:
+        trimmed = history[-MAX_HISTORY_TURNS:]
+        messages.extend(trimmed)
+
+    messages.append({"role": "user", "content": user_turn})
+
     return generate(
-        messages=[
-            {"role": "system", "content": system_content},
-            {"role": "user",   "content": user_turn},
-        ],
+        messages=messages,
         temperature=0.1,
         max_tokens=2048,
     )

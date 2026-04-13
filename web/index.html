@@ -3,42 +3,60 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Canada PR Navigator</title>
+  <title>Canada PR Navigator — IRCC Immigration Assistant</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Lora:ital,wght@0,500;0,600;1,500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <style>
     /* ── Reset & tokens ──────────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --forest:    #0F4C3A;
-      --forest-lt: #1A6B53;
-      --forest-dk: #082B21;
-      --maple:     #C41E3A;
-      --maple-lt:  #E84060;
-      --cream:     #F7F4EE;
-      --cream-dk:  #EDE9E0;
-      --ink:       #1C1C1A;
-      --ink-lt:    #4A4A46;
-      --ink-xs:    #7D7D77;
-      --border:    #D6D2C8;
+      /* Primary palette — deep government navy + Canadian red */
+      --navy:      #1B2A4A;
+      --navy-lt:   #243660;
+      --navy-dk:   #111D35;
+      --red:       #BF1722;
+      --red-lt:    #D9263A;
+      --teal:      #1A7A6E;
+      --teal-lt:   #22A090;
+
+      /* Neutrals */
+      --bg:        #F2F4F7;
+      --surface:   #FFFFFF;
+      --surface-2: #F7F9FC;
+      --border:    #D8DCE6;
+      --border-lt: #EBEEf4;
+      --ink:       #13192A;
+      --ink-lt:    #44506B;
+      --ink-xs:    #8491A8;
+
+      /* Legacy aliases kept for backward-compat with existing JS */
+      --forest:    var(--navy);
+      --forest-lt: var(--navy-lt);
+      --forest-dk: var(--navy-dk);
+      --maple:     var(--red);
+      --maple-lt:  var(--red-lt);
+      --cream:     var(--bg);
+      --cream-dk:  #E8EBF2;
       --white:     #FFFFFF;
-      --shadow-sm: 0 1px 3px rgba(15,76,58,.08), 0 1px 2px rgba(15,76,58,.06);
-      --shadow-md: 0 4px 12px rgba(15,76,58,.12), 0 2px 4px rgba(15,76,58,.06);
-      --shadow-lg: 0 12px 32px rgba(15,76,58,.14), 0 4px 8px rgba(15,76,58,.08);
-      --radius:    10px;
-      --radius-lg: 16px;
-      --radius-sm: 6px;
-      --transition: 180ms ease;
+
+      --shadow-sm: 0 1px 3px rgba(27,42,74,.07), 0 1px 2px rgba(27,42,74,.05);
+      --shadow-md: 0 4px 16px rgba(27,42,74,.10), 0 2px 4px rgba(27,42,74,.05);
+      --shadow-lg: 0 16px 40px rgba(27,42,74,.14), 0 4px 10px rgba(27,42,74,.08);
+      --radius:    8px;
+      --radius-lg: 12px;
+      --radius-sm: 5px;
+      --transition: 160ms ease;
     }
 
     html, body {
       height: 100%;
-      background: var(--cream);
+      background: var(--bg);
       color: var(--ink);
-      font-family: 'DM Sans', sans-serif;
-      font-size: 15px;
+      font-family: 'Inter', sans-serif;
+      font-size: 14.5px;
       line-height: 1.6;
       -webkit-font-smoothing: antialiased;
     }
@@ -52,45 +70,76 @@
 
     /* Left sidebar — profile tracker */
     .sidebar {
-      width: 290px;
+      width: 272px;
       flex-shrink: 0;
-      background: var(--forest-dk);
+      background: var(--navy-dk);
       color: var(--white);
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      border-right: 1px solid rgba(255,255,255,.06);
     }
 
     .sidebar-header {
-      padding: 24px 20px 16px;
-      border-bottom: 1px solid rgba(255,255,255,.10);
+      padding: 0;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+      flex-shrink: 0;
+    }
+
+    /* Flag-photo banner at the top of the sidebar */
+    .sidebar-hero {
+      position: relative;
+      height: 96px;
+      overflow: hidden;
+      background: var(--navy-dk);
+    }
+    .sidebar-hero img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center 35%;
+      opacity: .55;
+      display: block;
+    }
+    .sidebar-hero-overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to bottom, rgba(17,29,53,.0) 0%, rgba(17,29,53,.85) 100%);
+    }
+    .sidebar-hero-content {
+      position: absolute;
+      bottom: 12px;
+      left: 16px;
+      right: 16px;
     }
 
     .logo {
       display: flex;
       align-items: center;
-      gap: 10px;
-      margin-bottom: 4px;
+      gap: 8px;
+      margin-bottom: 2px;
     }
 
     .logo-leaf {
-      width: 28px; height: 28px;
-      background: var(--maple);
+      width: 22px; height: 22px;
+      background: var(--red);
       clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+      flex-shrink: 0;
     }
 
     .logo-text {
-      font-family: 'DM Serif Display', serif;
-      font-size: 17px;
+      font-family: 'Lora', serif;
+      font-size: 15px;
+      font-weight: 600;
       color: var(--white);
-      letter-spacing: -0.01em;
+      letter-spacing: 0;
     }
 
     .sidebar-subtitle {
-      font-size: 11px;
-      color: rgba(255,255,255,.45);
+      font-size: 10px;
+      color: rgba(255,255,255,.42);
       text-transform: uppercase;
-      letter-spacing: .08em;
+      letter-spacing: .09em;
       font-weight: 500;
     }
 
@@ -105,13 +154,15 @@
     .sidebar-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,.15); border-radius: 2px; }
 
     .profile-section-title {
-      font-size: 10px;
+      font-size: 9.5px;
       text-transform: uppercase;
-      letter-spacing: .1em;
-      font-weight: 600;
-      color: rgba(255,255,255,.40);
-      margin-bottom: 10px;
-      margin-top: 20px;
+      letter-spacing: .11em;
+      font-weight: 700;
+      color: rgba(255,255,255,.35);
+      margin-bottom: 8px;
+      margin-top: 18px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid rgba(255,255,255,.07);
     }
     .profile-section-title:first-child { margin-top: 0; }
 
@@ -156,8 +207,9 @@
 
     /* Progress bar */
     .progress-wrap {
-      padding: 16px 20px 20px;
-      border-top: 1px solid rgba(255,255,255,.10);
+      padding: 14px 16px 18px;
+      border-top: 1px solid rgba(255,255,255,.08);
+      background: rgba(0,0,0,.12);
     }
 
     .progress-label {
@@ -188,13 +240,14 @@
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      background: var(--cream);
+      background: var(--bg);
     }
 
     .chat-header {
-      padding: 16px 24px;
-      background: var(--white);
-      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      height: 56px;
+      background: var(--navy);
+      border-bottom: 1px solid rgba(255,255,255,.08);
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -202,19 +255,38 @@
     }
 
     .chat-title {
-      font-family: 'DM Serif Display', serif;
-      font-size: 19px;
-      color: var(--forest);
-      letter-spacing: -0.02em;
+      font-family: 'Lora', serif;
+      font-size: 17px;
+      font-weight: 600;
+      color: var(--white);
+      letter-spacing: 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .chat-title-flag {
+      width: 18px; height: 18px;
+      background: var(--red);
+      clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+      flex-shrink: 0;
+    }
+    .chat-title-sub {
+      font-family: 'Inter', sans-serif;
+      font-size: 10.5px;
+      font-weight: 400;
+      color: rgba(255,255,255,.40);
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      margin-left: 4px;
     }
 
     .session-badge {
       display: flex;
       align-items: center;
       gap: 6px;
-      font-size: 11.5px;
-      color: var(--ink-xs);
-      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: rgba(255,255,255,.40);
+      font-family: 'JetBrains Mono', monospace;
     }
 
     .session-dot {
@@ -227,10 +299,11 @@
     .messages {
       flex: 1;
       overflow-y: auto;
-      padding: 24px;
+      padding: 28px 32px;
       display: flex;
       flex-direction: column;
-      gap: 20px;
+      gap: 22px;
+      max-width: 100%;
     }
 
     .messages::-webkit-scrollbar { width: 6px; }
@@ -282,25 +355,25 @@
     }
 
     .msg-bubble.agent-bubble {
-      background: var(--white);
+      background: var(--surface);
       border: 1px solid var(--border);
-      border-top-left-radius: 4px;
+      border-top-left-radius: 3px;
       box-shadow: var(--shadow-sm);
       color: var(--ink);
     }
 
     .msg-bubble.user-bubble {
-      background: var(--forest);
+      background: var(--navy);
       color: var(--white);
-      border-top-right-radius: 4px;
+      border-top-right-radius: 3px;
     }
 
     /* ── Answer card ──────────────────────────────────────────────── */
     .answer-card {
-      background: var(--white);
+      background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
-      border-top-left-radius: 4px;
+      border-top-left-radius: 3px;
       box-shadow: var(--shadow-md);
       overflow: hidden;
     }
@@ -309,8 +382,9 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      padding: 12px 16px 10px;
-      border-bottom: 1px solid var(--cream-dk);
+      padding: 10px 16px 9px;
+      background: var(--surface-2);
+      border-bottom: 1px solid var(--border-lt);
       flex-wrap: wrap;
     }
 
@@ -326,61 +400,68 @@
       text-transform: uppercase;
     }
 
-    .badge-action1 { background: #DBEAFE; color: #1E40AF; }
-    .badge-action2 { background: #D1FAE5; color: #065F46; }
-    .badge-action3 { background: #FEF3C7; color: #92400E; }
-    .badge-action4 { background: #EDE9FE; color: #5B21B6; }
-    .badge-l1      { background: #D1FAE5; color: #065F46; }
-    .badge-l2      { background: #FEF3C7; color: #92400E; }
-    .badge-l3      { background: #FEE2E2; color: #991B1B; }
-    .badge-warn    { background: #FEF9C3; color: #854D0E; }
+    .badge { font-family: 'Inter', sans-serif; font-size: 10.5px; }
+    .badge-action1 { background: #E8EDFB; color: #2651B2; border: 1px solid #C5D1F5; }
+    .badge-action2 { background: #E4F4EC; color: #176B42; border: 1px solid #B3DFC6; }
+    .badge-action3 { background: #FDF3E3; color: #8A5210; border: 1px solid #F3D49A; }
+    .badge-action4 { background: #EEE9FB; color: #5527A8; border: 1px solid #D0BEF5; }
+    .badge-l1      { background: #E4F4EC; color: #176B42; border: 1px solid #B3DFC6; }
+    .badge-l2      { background: #FDF3E3; color: #8A5210; border: 1px solid #F3D49A; }
+    .badge-l3      { background: #FDECEA; color: #8B1A1A; border: 1px solid #F3BCB8; }
+    .badge-warn    { background: #FEF9E0; color: #7A5500; border: 1px solid #EDD87A; }
+    .badge-ircc    { background: var(--navy); color: #fff; font-size: 9.5px; letter-spacing:.06em; }
 
     .answer-body {
-      padding: 16px;
-      font-size: 14.5px;
+      padding: 16px 20px;
+      font-size: 14px;
       line-height: 1.75;
       color: var(--ink);
-      white-space: pre-wrap;
       word-break: break-word;
     }
+    .answer-body p  { margin: 0 0 0.65em; }
+    .answer-body ol,
+    .answer-body ul  { margin: 0.1em 0 0.75em 1.4em; line-height: 1.72; }
+    .answer-body li  { margin-bottom: 0.22em; }
+    .answer-body li:last-child { margin-bottom: 0; }
+    .answer-section-hd { margin: 0.8em 0 0.25em !important; font-size: 13px; font-weight: 600; color: var(--ink); }
 
     /* Citations */
     .citations-section {
-      border-top: 1px solid var(--cream-dk);
-      padding: 12px 16px;
+      border-top: 1px solid var(--border-lt);
+      padding: 12px 20px;
+      background: var(--surface-2);
     }
 
     .citations-title {
-      font-size: 11px;
+      font-size: 10px;
       text-transform: uppercase;
-      letter-spacing: .08em;
-      font-weight: 600;
+      letter-spacing: .09em;
+      font-weight: 700;
       color: var(--ink-xs);
-      margin-bottom: 10px;
+      margin-bottom: 8px;
     }
 
     .citation-item {
       display: flex;
       gap: 10px;
       padding: 8px 10px;
-      background: var(--cream);
+      background: var(--surface);
       border-radius: var(--radius-sm);
-      margin-bottom: 6px;
+      margin-bottom: 5px;
       border: 1px solid var(--border);
     }
     .citation-item:last-child { margin-bottom: 0; }
 
     .citation-num {
-      font-family: 'DM Mono', monospace;
-      font-size: 11px;
-      color: var(--forest);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
       font-weight: 500;
       flex-shrink: 0;
-      margin-top: 1px;
-      background: var(--forest);
+      margin-top: 2px;
+      background: var(--navy);
       color: var(--white);
       width: 18px; height: 18px;
-      border-radius: 50%;
+      border-radius: 4px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -396,13 +477,13 @@
     }
 
     .citation-url {
-      font-family: 'DM Mono', monospace;
-      font-size: 11px;
-      color: var(--forest-lt);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10.5px;
+      color: var(--teal);
       word-break: break-all;
       text-decoration: none;
     }
-    .citation-url:hover { text-decoration: underline; }
+    .citation-url:hover { text-decoration: underline; color: var(--teal-lt); }
 
     .citation-meta {
       font-size: 11px;
@@ -460,8 +541,8 @@
 
     /* ── Input area ──────────────────────────────────────────────── */
     .input-area {
-      padding: 16px 24px;
-      background: var(--white);
+      padding: 14px 28px 16px;
+      background: var(--surface);
       border-top: 1px solid var(--border);
       flex-shrink: 0;
     }
@@ -478,10 +559,10 @@
       border: 1.5px solid var(--border);
       border-radius: var(--radius);
       padding: 10px 14px;
-      font-family: 'DM Sans', sans-serif;
-      font-size: 14.5px;
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
       color: var(--ink);
-      background: var(--cream);
+      background: var(--bg);
       outline: none;
       min-height: 44px;
       max-height: 120px;
@@ -489,16 +570,16 @@
       transition: border-color var(--transition), box-shadow var(--transition);
     }
     .input-box:focus {
-      border-color: var(--forest-lt);
-      box-shadow: 0 0 0 3px rgba(26,107,83,.12);
-      background: var(--white);
+      border-color: var(--navy-lt);
+      box-shadow: 0 0 0 3px rgba(27,42,74,.10);
+      background: var(--surface);
     }
     .input-box::placeholder { color: var(--ink-xs); }
 
     .send-btn {
       width: 44px; height: 44px;
       flex-shrink: 0;
-      background: var(--forest);
+      background: var(--red);
       color: var(--white);
       border: none;
       border-radius: var(--radius);
@@ -506,11 +587,12 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: background var(--transition), transform var(--transition);
+      transition: background var(--transition), transform var(--transition), box-shadow var(--transition);
+      box-shadow: 0 2px 8px rgba(191,23,34,.25);
     }
-    .send-btn:hover:not(:disabled) { background: var(--forest-lt); transform: scale(1.04); }
+    .send-btn:hover:not(:disabled) { background: var(--red-lt); transform: scale(1.04); box-shadow: 0 4px 14px rgba(191,23,34,.35); }
     .send-btn:active:not(:disabled) { transform: scale(.96); }
-    .send-btn:disabled { opacity: .4; cursor: not-allowed; }
+    .send-btn:disabled { opacity: .35; cursor: not-allowed; box-shadow: none; }
 
     .input-hint {
       font-size: 11px;
@@ -530,17 +612,18 @@
       padding: 5px 12px;
       border: 1px solid var(--border);
       border-radius: 999px;
-      font-size: 12.5px;
-      color: var(--forest);
-      background: var(--white);
+      font-size: 12px;
+      color: var(--navy);
+      background: var(--surface);
       cursor: pointer;
       transition: all var(--transition);
-      font-family: 'DM Sans', sans-serif;
+      font-family: 'Inter', sans-serif;
+      font-weight: 500;
     }
     .quick-chip:hover {
-      background: var(--forest);
+      background: var(--navy);
       color: var(--white);
-      border-color: var(--forest);
+      border-color: var(--navy);
     }
 
     /* ── Welcome screen ──────────────────────────────────────────── */
@@ -549,34 +632,80 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
+      justify-content: flex-start;
       text-align: center;
-      padding: 40px 24px;
-      gap: 20px;
+      padding: 0 24px 40px;
+      gap: 0;
+      overflow-y: auto;
     }
 
-    .welcome-icon {
-      width: 64px; height: 64px;
-      background: var(--forest);
-      border-radius: 50%;
+    /* Hero banner fills the top of the welcome screen */
+    .welcome-hero {
+      width: 100%;
+      position: relative;
+      height: 240px;
+      overflow: hidden;
+      flex-shrink: 0;
+      margin-bottom: 32px;
+    }
+    .welcome-hero img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center 40%;
+      display: block;
+    }
+    .welcome-hero-overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(
+        to bottom,
+        rgba(17,29,53,.10) 0%,
+        rgba(17,29,53,.62) 70%,
+        rgba(17,29,53,.88) 100%
+      );
+    }
+    .welcome-hero-text {
+      position: absolute;
+      bottom: 28px;
+      left: 0; right: 0;
+      padding: 0 32px;
+    }
+    .welcome-hero-eyebrow {
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,.55);
+      margin-bottom: 8px;
       display: flex;
       align-items: center;
       justify-content: center;
+      gap: 6px;
+    }
+    .welcome-hero-eyebrow-leaf {
+      width: 12px; height: 12px;
+      background: var(--red);
+      clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+      display: inline-block;
     }
 
     .welcome-title {
-      font-family: 'DM Serif Display', serif;
-      font-size: 28px;
-      color: var(--forest);
-      letter-spacing: -0.03em;
-      line-height: 1.2;
+      font-family: 'Lora', serif;
+      font-size: 26px;
+      font-weight: 600;
+      color: var(--white);
+      letter-spacing: -0.01em;
+      line-height: 1.22;
+      text-shadow: 0 2px 12px rgba(0,0,0,.3);
     }
 
     .welcome-sub {
-      font-size: 15px;
+      font-size: 14.5px;
       color: var(--ink-lt);
-      max-width: 460px;
+      max-width: 500px;
       line-height: 1.65;
+      margin-bottom: 24px;
     }
 
     .welcome-actions {
@@ -584,66 +713,84 @@
       gap: 10px;
       flex-wrap: wrap;
       justify-content: center;
-      margin-top: 8px;
+      margin-top: 4px;
+      margin-bottom: 4px;
     }
 
     .welcome-btn {
-      padding: 10px 20px;
+      padding: 10px 22px;
       border-radius: var(--radius);
-      font-size: 14px;
-      font-family: 'DM Sans', sans-serif;
-      font-weight: 500;
+      font-size: 13.5px;
+      font-family: 'Inter', sans-serif;
+      font-weight: 600;
       cursor: pointer;
       transition: all var(--transition);
+      letter-spacing: .01em;
     }
 
     .welcome-btn.primary {
-      background: var(--forest);
+      background: var(--red);
       color: var(--white);
       border: none;
+      box-shadow: 0 2px 10px rgba(191,23,34,.28);
     }
-    .welcome-btn.primary:hover { background: var(--forest-lt); }
+    .welcome-btn.primary:hover { background: var(--red-lt); box-shadow: 0 4px 16px rgba(191,23,34,.36); }
 
     .welcome-btn.secondary {
       background: transparent;
-      color: var(--forest);
-      border: 1.5px solid var(--forest);
+      color: var(--navy);
+      border: 1.5px solid var(--border);
     }
-    .welcome-btn.secondary:hover { background: var(--forest); color: var(--white); }
+    .welcome-btn.secondary:hover { background: var(--navy); color: var(--white); border-color: var(--navy); }
 
     .action-cards {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
       gap: 10px;
-      max-width: 480px;
+      max-width: 520px;
       width: 100%;
+      margin-bottom: 24px;
     }
 
     .action-card {
       padding: 14px 16px;
-      background: var(--white);
+      background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius);
       text-align: left;
       cursor: pointer;
       transition: all var(--transition);
       box-shadow: var(--shadow-sm);
+      position: relative;
+      overflow: hidden;
     }
-    .action-card:hover { border-color: var(--forest); box-shadow: var(--shadow-md); transform: translateY(-1px); }
+    .action-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      width: 3px;
+      height: 100%;
+      background: var(--navy);
+      opacity: 0;
+      transition: opacity var(--transition);
+    }
+    .action-card:hover { border-color: var(--navy); box-shadow: var(--shadow-md); transform: translateY(-1px); }
+    .action-card:hover::before { opacity: 1; }
 
     .action-card-num {
-      font-size: 10px;
+      font-size: 9.5px;
       text-transform: uppercase;
-      letter-spacing: .08em;
-      font-weight: 600;
+      letter-spacing: .1em;
+      font-weight: 700;
       color: var(--ink-xs);
       margin-bottom: 5px;
+      font-family: 'JetBrains Mono', monospace;
     }
 
     .action-card-title {
       font-weight: 600;
-      font-size: 13.5px;
-      color: var(--forest);
+      font-size: 13px;
+      color: var(--navy);
       margin-bottom: 4px;
     }
 
@@ -677,20 +824,21 @@
     .status-banner.ok    { background:#F0FDF4; border-color:#BBF7D0; color:#14532D; }
     .status-banner a { color:inherit; font-weight:600; }
     .restart-btn {
-      padding:5px 12px; background:transparent; border:1px solid var(--border);
-      border-radius:var(--radius-sm); font-size:12px; color:var(--ink-lt);
-      cursor:pointer; font-family:"DM Sans",sans-serif; transition:all var(--transition);
+      padding:5px 12px; background:transparent; border:1px solid rgba(255,255,255,.22);
+      border-radius:var(--radius-sm); font-size:11.5px; color:rgba(255,255,255,.65);
+      cursor:pointer; font-family:'Inter',sans-serif; transition:all var(--transition);
     }
-    .restart-btn:hover { border-color:var(--forest); color:var(--forest); }
+    .restart-btn:hover { border-color:rgba(255,255,255,.55); color:var(--white); }
     .collecting-card {
-      background:var(--white); border:1px solid var(--border);
-      border-radius:var(--radius-lg); border-top-left-radius:4px;
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:var(--radius-lg); border-top-left-radius:3px;
       box-shadow:var(--shadow-sm); overflow:hidden;
     }
     .collecting-header {
-      padding:10px 14px; border-bottom:1px solid var(--cream-dk);
-      display:flex; align-items:center; gap:7px; font-size:11.5px;
-      font-weight:600; color:var(--ink-xs); text-transform:uppercase; letter-spacing:.05em;
+      padding:10px 14px; border-bottom:1px solid var(--border-lt);
+      background:var(--surface-2);
+      display:flex; align-items:center; gap:7px; font-size:11px;
+      font-weight:700; color:var(--ink-xs); text-transform:uppercase; letter-spacing:.07em;
     }
     .collecting-pulse {
       width:7px; height:7px; border-radius:50%; background:#FCD34D;
@@ -699,11 +847,385 @@
     @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:.3;} }
     .collecting-body { padding:12px 14px; font-size:14px; color:var(--ink); line-height:1.65; white-space:pre-wrap; }
 
+    /* ── Profile form ────────────────────────────────────────────── */
+    .pf-form { padding-bottom: 8px; }
+
+    .pf-row {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      padding: 5px 0;
+      border-bottom: 1px solid rgba(255,255,255,.05);
+    }
+    .pf-row:last-child { border-bottom: none; }
+
+    .pf-label {
+      font-size: 10px;
+      font-weight: 600;
+      color: rgba(255,255,255,.42);
+      text-transform: uppercase;
+      letter-spacing: .07em;
+    }
+
+    .pf-select, .pf-input {
+      background: rgba(255,255,255,.07);
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 5px;
+      color: rgba(255,255,255,.88);
+      font-family: 'Inter', sans-serif;
+      font-size: 12px;
+      padding: 5px 8px;
+      width: 100%;
+      outline: none;
+      transition: border-color var(--transition), background var(--transition);
+      appearance: none;
+      -webkit-appearance: none;
+    }
+    .pf-select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='rgba(255,255,255,.35)'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 8px center; padding-right: 24px; }
+    .pf-select option { background: var(--navy-dk); color: var(--white); }
+    .pf-select:focus, .pf-input:focus {
+      border-color: rgba(74,222,128,.45);
+      background: rgba(255,255,255,.11);
+    }
+    .pf-input::placeholder { color: rgba(255,255,255,.25); }
+    .pf-input-inline { width: calc(100% - 28px); }
+    .pf-unit {
+      font-size: 11px;
+      color: rgba(255,255,255,.35);
+      align-self: center;
+      margin-left: 4px;
+    }
+    .pf-row-inline {
+      flex-direction: row;
+      align-items: center;
+      gap: 6px;
+    }
+    .pf-row-inline .pf-label { flex: 1; }
+
+    .pf-save-indicator {
+      font-size: 11px;
+      color: #4ADE80;
+      text-align: right;
+      padding: 4px 0 0;
+      height: 16px;
+      opacity: 0;
+      transition: opacity .3s ease;
+    }
+    .pf-save-indicator.visible { opacity: 1; }
+
+    @keyframes pf-flash-anim {
+      0%   { background: rgba(250,204,21,.35); }
+      70%  { background: rgba(250,204,21,.25); }
+      100% { background: transparent; }
+    }
+    .pf-flash { animation: pf-flash-anim 2s ease forwards; }
+
+    .pf-clear-btn {
+      display: block;
+      width: 100%;
+      margin-top: 10px;
+      padding: 6px;
+      background: transparent;
+      border: 1px solid rgba(255,255,255,.15);
+      border-radius: 5px;
+      color: rgba(255,255,255,.45);
+      font-size: 11.5px;
+      font-family: 'DM Sans', sans-serif;
+      cursor: pointer;
+      transition: all var(--transition);
+      text-align: center;
+    }
+    .pf-clear-btn:hover { border-color: var(--maple-lt); color: var(--maple-lt); }
+
+    /* ── Pathway overlay panel ──────────────────────────────────── */
+    .pathway-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: flex;
+      align-items: stretch;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity .25s ease;
+    }
+    .pathway-overlay.visible {
+      pointer-events: all;
+      opacity: 1;
+    }
+    .pathway-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(8,43,33,.55);
+      backdrop-filter: blur(2px);
+    }
+    .pathway-panel {
+      position: relative;
+      margin: auto;
+      width: min(1100px, 96vw);
+      height: min(780px, 92vh);
+      background: var(--cream);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-lg);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .pathway-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 22px 14px;
+      background: var(--forest-dk);
+      color: var(--white);
+      flex-shrink: 0;
+    }
+    .pathway-header-left { display: flex; flex-direction: column; gap: 3px; }
+    .pathway-title {
+      font-family: 'DM Serif Display', serif;
+      font-size: 18px;
+      letter-spacing: -.02em;
+    }
+    .pathway-subtitle {
+      font-size: 11px;
+      color: rgba(255,255,255,.45);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+    .pathway-close {
+      width: 32px; height: 32px;
+      border: none;
+      background: rgba(255,255,255,.10);
+      color: var(--white);
+      border-radius: 50%;
+      font-size: 16px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background var(--transition);
+    }
+    .pathway-close:hover { background: rgba(255,255,255,.22); }
+
+    .pathway-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 22px;
+      border-bottom: 1px solid var(--border);
+      background: var(--white);
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+    .pathway-legend {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11.5px;
+      color: var(--ink-lt);
+    }
+    .legend-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .ld-root    { background: #082B21; }
+    .ld-tier1   { background: #0F4C3A; }
+    .ld-tier2   { background: #127A57; }
+    .ld-stream  { background: #2C9F8F; }
+    .ld-leaf    { background: #3BB8B0; }
+    .ld-dimmed  { background: #E2DED6; border: 1px solid #C0BDB5; }
+
+    .pathway-hint {
+      margin-left: auto;
+      font-size: 11px;
+      color: var(--ink-xs);
+      font-style: italic;
+    }
+    .pathway-expand-btn {
+      padding: 5px 12px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 11.5px;
+      color: var(--forest);
+      cursor: pointer;
+      font-family: 'DM Sans', sans-serif;
+      transition: all var(--transition);
+    }
+    .pathway-expand-btn:hover { background: var(--forest); color: var(--white); border-color: var(--forest); }
+
+    .pathway-body {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+      background: #F9F7F3;
+      background-image: radial-gradient(circle, #D6D1C6 1px, transparent 1px);
+      background-size: 24px 24px;
+    }
+    #pathwaySvg {
+      width: 100%;
+      height: 100%;
+      cursor: grab;
+    }
+    #pathwaySvg:active { cursor: grabbing; }
+
+    /* Node hover effect via CSS (D3 uses pointer-events) */
+    .tree-node { transition: opacity .2s; }
+    .tree-node:hover .pill-rect {
+      filter: brightness(1.12) url(#pill-shadow);
+    }
+
+    /* D3 node tooltip */
+    .pathway-tooltip {
+      position: fixed;
+      z-index: 200;
+      background: var(--forest-dk);
+      color: var(--white);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      font-size: 12.5px;
+      max-width: 280px;
+      line-height: 1.6;
+      pointer-events: none;
+      box-shadow: var(--shadow-md);
+      opacity: 0;
+      transition: opacity .15s ease;
+    }
+    .pathway-tooltip.visible { opacity: 1; }
+    .tooltip-name { font-weight: 600; font-size: 13px; margin-bottom: 5px; }
+    .tooltip-desc { color: rgba(255,255,255,.75); margin-bottom: 7px; }
+    .tooltip-reqs { }
+    .tooltip-req-title { font-size: 10.5px; text-transform:uppercase; letter-spacing:.07em; color:rgba(255,255,255,.45); margin-bottom:4px; }
+    .tooltip-req {
+      display: flex; align-items: flex-start; gap: 6px;
+      font-size: 11.5px; margin-bottom: 3px;
+    }
+    .req-icon { flex-shrink:0; margin-top:1px; }
+    .req-met    { color: #4ADE80; }
+    .req-unmet  { color: #F87171; }
+    .req-unknown{ color: #FCD34D; }
+    .tooltip-url {
+      margin-top: 8px;
+      font-size: 10.5px;
+      color: rgba(255,255,255,.40);
+      word-break: break-all;
+    }
+    .tooltip-url a { color: #6ECBCB; text-decoration: none; }
+    .tooltip-url a:hover { text-decoration: underline; }
+
+    /* ── Inline pathway map card ─────────────────────────────────── */
+    .inline-map-card {
+      margin-top: 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow-sm);
+    }
+    .inline-map-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 11px 14px;
+      background: var(--forest-dk);
+      color: var(--white);
+      cursor: pointer;
+      user-select: none;
+      transition: background var(--transition);
+    }
+    .inline-map-header:hover { background: var(--forest); }
+    .inline-map-header-left { display: flex; align-items: center; gap: 8px; }
+    .inline-map-icon { font-size: 15px; }
+    .inline-map-title { font-weight: 600; font-size: 13px; }
+    .inline-map-badge {
+      padding: 2px 7px;
+      background: rgba(255,255,255,.15);
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+    .inline-map-toggle-btn {
+      background: transparent;
+      border: 1px solid rgba(255,255,255,.30);
+      color: rgba(255,255,255,.85);
+      border-radius: 5px;
+      padding: 4px 10px;
+      font-size: 11.5px;
+      font-family: 'DM Sans', sans-serif;
+      cursor: pointer;
+      transition: all var(--transition);
+      white-space: nowrap;
+    }
+    .inline-map-toggle-btn:hover { background: rgba(255,255,255,.15); }
+    .inline-map-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 14px;
+      border-bottom: 1px solid var(--border);
+      background: var(--white);
+    }
+    .inline-pathway-svg {
+      width: 100%;
+      height: 600px;
+      display: block;
+      cursor: grab;
+      background: #F9F7F3;
+      background-image: radial-gradient(circle, #D6D1C6 1px, transparent 1px);
+      background-size: 24px 24px;
+    }
+    .inline-pathway-svg:active { cursor: grabbing; }
+
+    /* ── Fullscreen mode for inline map card ──────────────────────── */
+    .inline-map-card:fullscreen,
+    .inline-map-card:-webkit-full-screen {
+      display: flex;
+      flex-direction: column;
+      background: #F9F7F3;
+      overflow: hidden;
+    }
+    .inline-map-card:fullscreen .inline-map-body,
+    .inline-map-card:-webkit-full-screen .inline-map-body {
+      flex: 1;
+      display: flex !important;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .inline-map-card:fullscreen .inline-map-toolbar,
+    .inline-map-card:-webkit-full-screen .inline-map-toolbar {
+      flex-shrink: 0;
+    }
+    .inline-map-card:fullscreen .inline-pathway-svg,
+    .inline-map-card:-webkit-full-screen .inline-pathway-svg {
+      flex: 1;
+      height: 100% !important;
+    }
+    .inline-fs-btn {
+      padding: 5px 12px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 11.5px;
+      color: var(--forest);
+      cursor: pointer;
+      font-family: 'DM Sans', sans-serif;
+      transition: all var(--transition);
+    }
+    .inline-fs-btn:hover { background: var(--forest); color: var(--white); border-color: var(--forest); }
+
     /* ── Responsive ─────────────────────────────────────────────── */
     @media (max-width: 720px) {
       .sidebar { display: none; }
-      .welcome-title { font-size: 22px; }
-      .action-cards { grid-template-columns: 1fr; }
+      .welcome-title { font-size: 21px; }
+      .welcome-hero { height: 200px; }
+      .action-cards { grid-template-columns: 1fr; max-width: 340px; }
+      .messages { padding: 20px 16px; }
+      .input-area { padding: 12px 16px 14px; }
     }
   </style>
 </head>
@@ -713,17 +1235,214 @@
   <!-- ── Sidebar: profile tracker ─────────────────────────────── -->
   <aside class="sidebar">
     <div class="sidebar-header">
-      <div class="logo">
-        <div class="logo-leaf"></div>
-        <span class="logo-text">PR Navigator</span>
+      <div class="sidebar-hero">
+        <img src="/photo.jpg" alt="Canada landscape" />
+        <div class="sidebar-hero-overlay"></div>
+        <div class="sidebar-hero-content">
+          <div class="logo">
+            <div class="logo-leaf"></div>
+            <span class="logo-text">PR Navigator</span>
+          </div>
+          <div class="sidebar-subtitle">Canada Immigration Assistant</div>
+        </div>
       </div>
-      <div class="sidebar-subtitle">Canada Immigration Assistant</div>
     </div>
 
     <div class="sidebar-body" id="profilePanel">
-      <div style="color:rgba(255,255,255,.35);font-size:13px;padding-top:12px;">
-        Start a conversation to see your profile build up here.
-      </div>
+      <form id="profileForm" class="pf-form" autocomplete="off" onchange="autoSaveProfile()">
+
+        <!-- PERSONAL -->
+        <div class="profile-section-title">Personal</div>
+        <div class="pf-row">
+          <label class="pf-label">Age</label>
+          <input type="number" id="pf_age" class="pf-input" placeholder="e.g. 27" min="18" max="75">
+        </div>
+        <div class="pf-row">
+          <label class="pf-label">Marital Status</label>
+          <select id="pf_marital" class="pf-select">
+            <option value="">Select…</option>
+            <option>Single</option>
+            <option>Married</option>
+            <option>Common-law</option>
+          </select>
+        </div>
+        <div class="pf-row">
+          <label class="pf-label">Status in Canada</label>
+          <select id="pf_status" class="pf-select" onchange="toggleWorkPermitRow()">
+            <option value="">Select…</option>
+            <option>International Student</option>
+            <option>Work Permit Holder</option>
+            <option>Visitor / No Permit</option>
+            <option>Outside Canada</option>
+            <option>Permanent Resident</option>
+          </select>
+        </div>
+        <div class="pf-row" id="pf_work_permit_row" style="display:none;">
+          <label class="pf-label">Work Permit Type</label>
+          <select id="pf_work_permit_type" class="pf-select">
+            <option value="">Select…</option>
+            <option>PGWP</option>
+            <option>LMIA / Employer-Specific</option>
+            <option>Intra-Company (ICT)</option>
+            <option>IEC Working Holiday</option>
+            <option>Other</option>
+          </select>
+        </div>
+
+        <!-- EDUCATION -->
+        <div class="profile-section-title">Education</div>
+        <div class="pf-row">
+          <label class="pf-label">Highest Level</label>
+          <select id="pf_education" class="pf-select">
+            <option value="">Select…</option>
+            <option>Less than high school</option>
+            <option>High school diploma</option>
+            <option>1-year certificate / diploma</option>
+            <option>2-year diploma</option>
+            <option>Bachelor's degree</option>
+            <option>Two or more post-secondary credentials</option>
+            <option>Master's degree</option>
+            <option>Doctoral degree (PhD)</option>
+          </select>
+        </div>
+        <div class="pf-row">
+          <label class="pf-label">Obtained in Canada?</label>
+          <select id="pf_canadian_degree" class="pf-select">
+            <option value="">Select…</option>
+            <option>Yes</option>
+            <option>No</option>
+            <option>Currently enrolled in Canada</option>
+          </select>
+        </div>
+        <div class="pf-row">
+          <label class="pf-label">Graduation Year</label>
+          <input type="number" id="pf_grad_year" class="pf-input" placeholder="e.g. 2024" min="1990" max="2030">
+        </div>
+
+        <!-- LANGUAGE -->
+        <div class="profile-section-title">Language</div>
+        <div class="pf-row">
+          <label class="pf-label">Test Type</label>
+          <select id="pf_lang_test" class="pf-select">
+            <option value="">Select…</option>
+            <option>IELTS General</option>
+            <option>IELTS Academic</option>
+            <option>CELPIP General</option>
+            <option>TEF Canada</option>
+            <option>TCF Canada</option>
+          </select>
+        </div>
+        <div class="pf-row">
+          <label class="pf-label">CLB Level (Primary)</label>
+          <select id="pf_clb" class="pf-select">
+            <option value="">Select…</option>
+            <option>CLB 4</option><option>CLB 5</option><option>CLB 6</option>
+            <option>CLB 7</option><option>CLB 8</option><option>CLB 9</option>
+            <option>CLB 10</option><option>CLB 11</option><option>CLB 12</option>
+          </select>
+        </div>
+        <div class="pf-row">
+          <label class="pf-label">2nd Language CLB</label>
+          <select id="pf_clb2" class="pf-select">
+            <option value="">None</option>
+            <option>CLB 4</option><option>CLB 5</option><option>CLB 6</option>
+            <option>CLB 7</option><option>CLB 8</option><option>CLB 9</option>
+            <option>CLB 10</option><option>CLB 11</option><option>CLB 12</option>
+          </select>
+        </div>
+
+        <!-- WORK EXPERIENCE -->
+        <div class="profile-section-title">Work Experience</div>
+        <div class="pf-row pf-row-inline">
+          <label class="pf-label">Canadian Exp.</label>
+          <input type="number" id="pf_can_work" class="pf-input pf-input-inline" placeholder="0" min="0" max="240">
+          <span class="pf-unit">mo</span>
+        </div>
+        <div class="pf-row pf-row-inline">
+          <label class="pf-label">Foreign Exp.</label>
+          <input type="number" id="pf_for_work" class="pf-input pf-input-inline" placeholder="0" min="0" max="240">
+          <span class="pf-unit">mo</span>
+        </div>
+        <div class="pf-row">
+          <label class="pf-label">Valid Job Offer?</label>
+          <select id="pf_job_offer" class="pf-select" onchange="toggleNocRow()">
+            <option value="">Select…</option>
+            <option value="No job offer">No</option>
+            <option value="Yes – NOC TEER 0 (Senior management)">Yes – TEER 0</option>
+            <option value="Yes – NOC TEER 1">Yes – TEER 1</option>
+            <option value="Yes – NOC TEER 2 or 3">Yes – TEER 2/3</option>
+          </select>
+        </div>
+        <div class="pf-row" id="pf_noc_row" style="display:none;">
+          <label class="pf-label">NOC Code</label>
+          <input type="text" id="pf_noc" class="pf-input" placeholder="e.g. 21222">
+        </div>
+
+        <!-- LOCATION -->
+        <div class="profile-section-title">Location</div>
+        <div class="pf-row">
+          <label class="pf-label">Current Province</label>
+          <select id="pf_cur_prov" class="pf-select">
+            <option value="">Select…</option>
+            <option>Ontario</option><option>British Columbia</option>
+            <option>Alberta</option><option>Quebec</option>
+            <option>Manitoba</option><option>Saskatchewan</option>
+            <option>Nova Scotia</option><option>New Brunswick</option>
+            <option>Prince Edward Island</option>
+            <option>Newfoundland and Labrador</option>
+            <option>Northwest Territories</option>
+            <option>Yukon</option><option>Nunavut</option>
+            <option value="Outside Canada">Outside Canada</option>
+          </select>
+        </div>
+        <div class="pf-row">
+          <label class="pf-label">Target Province</label>
+          <select id="pf_tgt_prov" class="pf-select">
+            <option value="">Select…</option>
+            <option>Ontario</option><option>British Columbia</option>
+            <option>Alberta</option><option>Quebec</option>
+            <option>Manitoba</option><option>Saskatchewan</option>
+            <option>Nova Scotia</option><option>New Brunswick</option>
+            <option>Prince Edward Island</option>
+            <option>Newfoundland and Labrador</option>
+            <option>Northwest Territories</option>
+            <option>Yukon</option><option>Nunavut</option>
+            <option value="Any province">Any province (federal)</option>
+          </select>
+        </div>
+
+        <!-- SPOUSE (optional) -->
+        <div class="profile-section-title">Spouse / Partner (optional)</div>
+        <div class="pf-row">
+          <label class="pf-label">Spouse Education</label>
+          <select id="pf_spouse_edu" class="pf-select">
+            <option value="">None / N/A</option>
+            <option>High school diploma</option>
+            <option>1-year certificate / diploma</option>
+            <option>2-year diploma</option>
+            <option>Bachelor's degree</option>
+            <option>Master's degree</option>
+            <option>Doctoral degree (PhD)</option>
+          </select>
+        </div>
+        <div class="pf-row">
+          <label class="pf-label">Spouse CLB</label>
+          <select id="pf_spouse_clb" class="pf-select">
+            <option value="">None / N/A</option>
+            <option>CLB 4</option><option>CLB 5</option><option>CLB 6</option>
+            <option>CLB 7</option><option>CLB 8</option><option>CLB 9</option>
+            <option>CLB 10</option><option>CLB 11</option><option>CLB 12</option>
+          </select>
+        </div>
+        <div class="pf-row pf-row-inline">
+          <label class="pf-label">Spouse Canadian Exp.</label>
+          <input type="number" id="pf_spouse_work" class="pf-input pf-input-inline" placeholder="0" min="0" max="240">
+          <span class="pf-unit">mo</span>
+        </div>
+
+      </form>
+      <div class="pf-save-indicator" id="saveIndicator"></div>
+      <button class="pf-clear-btn" onclick="clearProfile()">Clear profile</button>
     </div>
 
     <div class="progress-wrap">
@@ -740,11 +1459,16 @@
   <!-- ── Main chat ─────────────────────────────────────────────── -->
   <main class="main">
     <div class="chat-header">
-      <div class="chat-title">Canada Immigration &amp; PR Navigator</div>
-      <div style="display:flex;align-items:center;gap:12px;">
-        <button class="restart-btn" id="restartBtn" onclick="restartSession()" style="display:none;">&#8635; New conversation</button>
+      <div class="chat-title">
+        <div class="chat-title-flag"></div>
+        Canada PR Navigator
+        <span class="chat-title-sub">Powered by IRCC &amp; OINP Official Sources</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <button class="restart-btn" onclick="openPathwayPanel()" style="">&#128506; Pathway Map</button>
+        <button class="restart-btn" id="restartBtn" onclick="restartSession()" style="display:none;">&#8635; New Chat</button>
         <div class="session-badge" id="sessionBadge">
-          <div class="session-dot" id="sessionDot" style="background:#D4D4D0;"></div>
+          <div class="session-dot" id="sessionDot" style="background:rgba(255,255,255,.2);"></div>
           <span id="sessionLabel">Not connected</span>
         </div>
       </div>
@@ -769,10 +1493,10 @@
           I'll guide you through your immigration options using the latest official IRCC and OINP policies — with full citations for every answer.
         </p>
         <div class="action-cards">
-          <div class="action-card" onclick="startWithPrompt('What PR pathways exist for someone with my profile?')">
+          <div class="action-card" onclick="showPathwayMapNow()">
             <div class="action-card-num">Action 1</div>
-            <div class="action-card-title">Pathway Overview</div>
-            <div class="action-card-desc">See all federal & Ontario routes available to you</div>
+            <div class="action-card-title">Pathway Map</div>
+            <div class="action-card-desc">Interactive map of all federal & provincial PR routes</div>
           </div>
           <div class="action-card" onclick="startWithPrompt('Am I eligible for the OINP Masters Graduate Stream?')">
             <div class="action-card-num">Action 2</div>
@@ -819,6 +1543,37 @@
     </div>
   </main>
 </div>
+
+<!-- ── Pathway visualisation overlay ───────────────────────────── -->
+<div class="pathway-overlay" id="pathwayOverlay">
+  <div class="pathway-backdrop" onclick="closePathwayPanel()"></div>
+  <div class="pathway-panel">
+    <div class="pathway-header">
+      <div class="pathway-header-left">
+        <div class="pathway-title">Canada PR Pathway Map</div>
+        <div class="pathway-subtitle">Click a node to expand · Hover for requirements · Double-click to open source</div>
+      </div>
+      <button class="pathway-close" onclick="closePathwayPanel()" title="Close">&#10005;</button>
+    </div>
+    <div class="pathway-toolbar">
+      <div class="pathway-legend">
+        <div class="legend-item"><div class="legend-dot ld-root"></div>Root</div>
+        <div class="legend-item"><div class="legend-dot ld-tier1"></div>Category</div>
+        <div class="legend-item"><div class="legend-dot ld-tier2"></div>Program</div>
+        <div class="legend-item"><div class="legend-dot ld-stream"></div>Stream</div>
+        <div class="legend-item"><div class="legend-dot ld-leaf"></div>Pathway</div>
+        <div class="legend-item"><div class="legend-dot ld-dimmed"></div>Not applicable (profile)</div>
+      </div>
+      <button class="pathway-expand-btn" onclick="expandAllNodes()">Expand All</button>
+      <button class="pathway-expand-btn" onclick="resetPathwayView()">Reset View</button>
+      <div class="pathway-hint">Profile fields from the left panel auto-dim inapplicable paths</div>
+    </div>
+    <div class="pathway-body">
+      <svg id="pathwaySvg"></svg>
+    </div>
+  </div>
+</div>
+<div class="pathway-tooltip" id="pathwayTooltip"></div>
 
 <script>
 /* ────────────────────────────────────────────────────────────────
@@ -881,6 +1636,25 @@ async function startWithPrompt(msg) {
   await initSession(msg);
 }
 
+/* Action 1 shortcut: inject the pathway map instantly without any LLM call.
+   The PATHWAY_DATA is already embedded in the page — no backend round-trip needed. */
+async function showPathwayMapNow() {
+  // 1. Create a session (fast /api/session POST — no LLM involved)
+  await initSession();   // sets up chat view, greeting, session ID
+  // 2. Show the user "message"
+  appendUserMessage('Show me the Canadian PR pathway map');
+  // 3. Immediately inject the inline map card — no loading spinner, no wait
+  appendAnswer({
+    action_type: 'action_1',
+    answer: 'Here is an interactive overview of all Canadian permanent residence pathways. '
+          + 'Expand the map below to explore federal programs, provincial streams, and special pathways — '
+          + 'click any node to drill down and hover for key eligibility requirements.',
+    risk_level: 'L1',
+    citations: [],
+    retry_count: 0,
+  });
+}
+
 /* ────────────────────────────────────────────────────────────────
    Sending messages
    ──────────────────────────────────────────────────────────────── */
@@ -903,7 +1677,11 @@ async function sendMessage() {
     const res  = await fetch('/api/chat', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ session_id: sessionId, message: text }),
+      body:    JSON.stringify({
+        session_id: sessionId,
+        message: text,
+        profile_overrides: readProfileFromForm(),
+      }),
     });
     const data = await res.json();
 
@@ -922,6 +1700,7 @@ async function sendMessage() {
     }
 
     if (data.profile) updateProfile(data.profile);
+    if (data.extracted_fields) updateFormFromExtracted(data.extracted_fields);
 
   } catch (err) {
     hideTyping();
@@ -969,6 +1748,30 @@ function appendAnswer(data) {
     ? `<div class="retry-info">Retrieval retry used (${data.retry_count}/1)</div>`
     : '';
 
+  const svgId = `inline-map-${++_inlineMapCounter}`;
+  const action1Html = (data.action_type === 'action_1')
+    ? `<div class="inline-map-card" id="card-${svgId}">
+        <div class="inline-map-header" onclick="toggleInlineMap(this,'${svgId}')">
+          <div class="inline-map-header-left">
+            <span class="inline-map-icon">🗺</span>
+            <span class="inline-map-title">Canada PR Pathway Map</span>
+            <span class="inline-map-badge">Interactive</span>
+          </div>
+          <button class="inline-map-toggle-btn">▼ Expand map</button>
+        </div>
+        <div class="inline-map-body" id="body-${svgId}" style="display:none;">
+          <div class="inline-map-toolbar">
+            <span style="font-size:11px;color:var(--ink-xs);">Click nodes to expand · Hover for requirements · Double-click to open source</span>
+            <div style="display:flex;gap:6px;">
+              <button class="pathway-expand-btn" onclick="expandInlineMap('${svgId}')">Expand All</button>
+              <button class="inline-fs-btn" id="fs-btn-${svgId}" onclick="toggleFullscreen('${svgId}')" title="Enter fullscreen">⛶ Fullscreen</button>
+            </div>
+          </div>
+          <svg id="${svgId}" class="inline-pathway-svg"></svg>
+        </div>
+      </div>`
+    : '';
+
   row.innerHTML = `
     <div class="msg-avatar agent">🍁</div>
     <div class="msg-body" style="max-width:720px;width:100%;">
@@ -977,6 +1780,7 @@ function appendAnswer(data) {
         <div class="answer-body">${renderMarkdown(data.answer)}</div>
         ${warnHtml}
         ${retryHtml}
+        ${action1Html}
         ${citHtml}
       </div>
     </div>`;
@@ -1070,49 +1874,236 @@ function useChip(btn) {
 }
 
 /* ────────────────────────────────────────────────────────────────
-   Profile sidebar
+   Profile form — localStorage-backed static form
    ──────────────────────────────────────────────────────────────── */
-function updateProfile(profile) {
-  if (!profile) return;
+const PF_STORAGE_KEY = 'pr_navigator_profile_v1';
+// The 8 required field IDs (maps to D-002 required fields)
+const PF_REQUIRED_IDS = ['pf_age','pf_education','pf_clb','pf_can_work',
+                         'pf_cur_prov','pf_tgt_prov','pf_job_offer','pf_grad_year'];
 
-  const panel = document.getElementById('profilePanel');
-  const req   = profile.required || [];
-  const opt   = profile.optional || [];
+function readProfileFromForm() {
+  const o = {};
 
-  const filled = req.filter(f => f.filled).length;
-  const total  = req.length;
+  // Language: combine test type + CLB into language_score string
+  const langTest = val('pf_lang_test');
+  const clb      = val('pf_clb');
+  if (langTest && clb)  o.language_score = `${langTest}, ${clb}`;
+  else if (clb)         o.language_score = clb;
+  else if (langTest)    o.language_score = langTest;
 
-  document.getElementById('progressPct').textContent  = `${filled} / ${total}`;
-  document.getElementById('progressFill').style.width = `${(filled/total)*100}%`;
+  // user_situation: marital status only (immigration fields now have dedicated keys)
+  const marital = val('pf_marital');
+  if (marital) o.user_situation = marital;
 
-  let html = '<div class="profile-section-title">Required Fields</div>';
-  req.forEach(f => {
-    html += `<div class="field-row">
-      <div class="field-dot ${f.filled ? 'filled' : 'missing'}"></div>
-      <div>
-        <div class="field-label">${escHtml(f.label)}</div>
-        ${f.filled
-          ? `<div class="field-value">${escHtml(String(f.value))}</div>`
-          : `<div class="field-empty">Not collected yet</div>`
-        }
-      </div>
-    </div>`;
-  });
+  // Immigration status and work permit type as dedicated fields
+  const status = val('pf_status'); if (status) o.immigration_status = status;
+  const wpType = val('pf_work_permit_type'); if (wpType) o.work_permit_type = wpType;
 
-  if (opt.length > 0) {
-    html += '<div class="profile-section-title">Optional Fields</div>';
-    opt.forEach(f => {
-      html += `<div class="field-row">
-        <div class="field-dot filled"></div>
-        <div>
-          <div class="field-label">${escHtml(f.label)}</div>
-          <div class="field-value">${escHtml(String(f.value))}</div>
-        </div>
-      </div>`;
-    });
+  // Direct string/number fields
+  const age = val('pf_age'); if (age) o.age_band = String(age);
+  const edu = val('pf_education'); if (edu) o.education_level = edu;
+  const canDeg = val('pf_canadian_degree'); if (canDeg) o.canadian_degree = canDeg;
+  const gradYr = val('pf_grad_year'); if (gradYr) o.graduation_date = String(gradYr);
+  const clb2 = val('pf_clb2'); if (clb2) o.second_language_score = clb2;
+  const canWork = val('pf_can_work'); if (canWork !== '') o.canadian_work_months = parseInt(canWork) || 0;
+  const forWork = val('pf_for_work'); if (forWork !== '') o.foreign_work_months = parseInt(forWork) || 0;
+  const jobOffer = val('pf_job_offer'); if (jobOffer) o.job_offer_status = jobOffer;
+  const noc = val('pf_noc'); if (noc) o.noc_code = noc;
+  const curProv = val('pf_cur_prov'); if (curProv) o.current_province = curProv;
+  const tgtProv = val('pf_tgt_prov'); if (tgtProv) o.target_province = tgtProv;
+
+  // Spouse fields
+  const spouseEdu = val('pf_spouse_edu'); if (spouseEdu) o.spouse_education = spouseEdu;
+  const spouseClb = val('pf_spouse_clb'); if (spouseClb) o.spouse_language_score = spouseClb;
+  const spouseWork = val('pf_spouse_work'); if (spouseWork !== '') o.spouse_canadian_work_months = parseInt(spouseWork) || 0;
+
+  return o;
+}
+
+function val(id) {
+  const el = document.getElementById(id);
+  if (!el) return '';
+  return (el.value ?? '').trim();
+}
+
+function autoSaveProfile() {
+  const data = readProfileFromForm();
+  try { localStorage.setItem(PF_STORAGE_KEY, JSON.stringify(data)); } catch(e) {}
+  updateProgressBar();
+  toggleNocRow();
+  toggleWorkPermitRow();
+  showSaveIndicator();
+}
+
+function toggleNocRow() {
+  const jobOffer = val('pf_job_offer');
+  const nocRow = document.getElementById('pf_noc_row');
+  if (nocRow) nocRow.style.display = (jobOffer && jobOffer !== 'No job offer') ? 'flex' : 'none';
+}
+
+function toggleWorkPermitRow() {
+  const status = val('pf_status');
+  const row = document.getElementById('pf_work_permit_row');
+  if (row) row.style.display = (status === 'Work Permit Holder') ? 'flex' : 'none';
+}
+
+/*
+ * updateFormFromExtracted(fields)
+ * Called with the server's `extracted_fields` dict after each chat response.
+ * Sets form inputs for any field the conversation just extracted, then flashes
+ * the changed elements yellow for 2 s so the user notices the update.
+ */
+function updateFormFromExtracted(fields) {
+  if (!fields || typeof fields !== 'object') return;
+
+  const flash = (el) => {
+    if (!el) return;
+    el.classList.remove('pf-flash');
+    // Force reflow so re-adding the class restarts the animation
+    void el.offsetWidth;
+    el.classList.add('pf-flash');
+    el.addEventListener('animationend', () => el.classList.remove('pf-flash'), { once: true });
+  };
+
+  const setInpF = (id, v) => {
+    if (v == null) return;
+    const el = document.getElementById(id);
+    if (!el || String(el.value).trim() !== '') return; // don't overwrite form-set values
+    el.value = v;
+    flash(el);
+  };
+  const setOptF = (id, value) => {
+    if (!value) return;
+    const el = document.getElementById(id);
+    if (!el || el.value !== '') return; // don't overwrite form-set values
+    for (let i = 0; i < el.options.length; i++) {
+      if (el.options[i].value === value || el.options[i].text === value) {
+        el.selectedIndex = i;
+        flash(el);
+        return;
+      }
+    }
+  };
+
+  if (fields.age_band)           setInpF('pf_age', fields.age_band);
+  if (fields.education_level)    setOptF('pf_education', fields.education_level);
+  if (fields.canadian_degree)    setOptF('pf_canadian_degree', fields.canadian_degree);
+  if (fields.graduation_date)    setInpF('pf_grad_year', fields.graduation_date);
+  if (fields.current_province)   setOptF('pf_cur_prov', fields.current_province);
+  if (fields.target_province)    setOptF('pf_tgt_prov', fields.target_province);
+  if (fields.job_offer_status)   setOptF('pf_job_offer', fields.job_offer_status);
+  if (fields.noc_code)           setInpF('pf_noc', fields.noc_code);
+  if (fields.canadian_work_months != null) setInpF('pf_can_work', fields.canadian_work_months);
+  if (fields.foreign_work_months != null)  setInpF('pf_for_work', fields.foreign_work_months);
+  if (fields.immigration_status) setOptF('pf_status', fields.immigration_status);
+  if (fields.work_permit_type)   setOptF('pf_work_permit_type', fields.work_permit_type);
+
+  // Parse language_score string ("IELTS General, CLB 9") into the two selects
+  if (fields.language_score) {
+    const testTypes = ['IELTS General','IELTS Academic','CELPIP General','TEF Canada','TCF Canada'];
+    const lParts = fields.language_score.split(', ');
+    const testPart = lParts.find(p => testTypes.some(t => t === p));
+    const clbPart  = lParts.find(p => /^CLB \d+$/.test(p));
+    if (testPart) setOptF('pf_lang_test', testPart);
+    if (clbPart)  setOptF('pf_clb', clbPart);
   }
 
-  panel.innerHTML = html;
+  // Update dependent UI state and persist to localStorage
+  toggleNocRow();
+  toggleWorkPermitRow();
+  autoSaveProfile();
+}
+
+function showSaveIndicator() {
+  const ind = document.getElementById('saveIndicator');
+  if (!ind) return;
+  ind.textContent = '✓ Saved';
+  ind.classList.add('visible');
+  clearTimeout(ind._t);
+  ind._t = setTimeout(() => ind.classList.remove('visible'), 2000);
+}
+
+function updateProgressBar() {
+  const filled = PF_REQUIRED_IDS.filter(id => {
+    const v = val(id);
+    return v !== '' && v !== null && v !== undefined;
+  }).length;
+  const total = PF_REQUIRED_IDS.length;
+  document.getElementById('progressPct').textContent  = `${filled} / ${total}`;
+  document.getElementById('progressFill').style.width = `${(filled / total) * 100}%`;
+}
+
+function loadProfileFromStorage() {
+  let data;
+  try { data = JSON.parse(localStorage.getItem(PF_STORAGE_KEY) || 'null'); } catch(e) {}
+  if (!data) return;
+
+  // Language score: parse "IELTS General, CLB 9" back into two selects
+  if (data.language_score) {
+    const testTypes = ['IELTS General','IELTS Academic','CELPIP General','TEF Canada','TCF Canada'];
+    const lParts = data.language_score.split(', ');
+    const testPart = lParts.find(p => testTypes.some(t => t === p));
+    const clbPart  = lParts.find(p => /^CLB \d+$/.test(p));
+    if (testPart) setOpt('pf_lang_test', testPart);
+    if (clbPart)  setOpt('pf_clb', clbPart);
+  }
+
+  // user_situation: now only contains marital status
+  if (data.user_situation) {
+    const maritalOpts = ['Single','Married','Common-law'];
+    if (maritalOpts.includes(data.user_situation)) {
+      setOpt('pf_marital', data.user_situation);
+    }
+  }
+
+  // Dedicated immigration status fields
+  if (data.immigration_status) setOpt('pf_status', data.immigration_status);
+  if (data.work_permit_type)   setOpt('pf_work_permit_type', data.work_permit_type);
+
+  // Direct fields
+  const setInp = (id, v) => { const el = document.getElementById(id); if (el && v != null) el.value = v; };
+  setInp('pf_age', data.age_band);
+  setOpt('pf_education', data.education_level);
+  setOpt('pf_canadian_degree', data.canadian_degree);
+  setInp('pf_grad_year', data.graduation_date);
+  setOpt('pf_clb2', data.second_language_score);
+  setInp('pf_can_work', data.canadian_work_months);
+  setInp('pf_for_work', data.foreign_work_months);
+  setOpt('pf_job_offer', data.job_offer_status);
+  setInp('pf_noc', data.noc_code);
+  setOpt('pf_cur_prov', data.current_province);
+  setOpt('pf_tgt_prov', data.target_province);
+  setOpt('pf_spouse_edu', data.spouse_education);
+  setOpt('pf_spouse_clb', data.spouse_language_score);
+  setInp('pf_spouse_work', data.spouse_canadian_work_months);
+
+  updateProgressBar();
+  toggleNocRow();
+  toggleWorkPermitRow();
+}
+
+function setOpt(id, value) {
+  if (!value) return;
+  const el = document.getElementById(id);
+  if (!el) return;
+  for (let i = 0; i < el.options.length; i++) {
+    if (el.options[i].value === value || el.options[i].text === value) {
+      el.selectedIndex = i; return;
+    }
+  }
+}
+
+function clearProfile() {
+  if (!confirm('Clear all profile fields?')) return;
+  try { localStorage.removeItem(PF_STORAGE_KEY); } catch(e) {}
+  document.getElementById('profileForm').reset();
+  toggleNocRow();
+  updateProgressBar();
+}
+
+// Legacy – called from server responses; kept as no-op since form is now source of truth
+function updateProfile(profile) {
+  updateProgressBar();
 }
 
 /* ────────────────────────────────────────────────────────────────
@@ -1225,6 +2216,9 @@ function appendCollectingCard(text, data) {
         </div>
         <div class="collecting-body">${escHtml(text)}</div>
       </div>
+      <div style="font-size:11.5px;color:var(--ink-xs);margin-top:6px;padding-left:2px;">
+        💡 <strong>Tip:</strong> Fill in your profile directly using the form on the left — no back-and-forth needed.
+      </div>
     </div>`;
   addMessage(row);
 }
@@ -1275,61 +2269,1064 @@ async function checkStatus() {
   } catch (e) { /* server not up yet */ }
 }
 
-window.addEventListener('DOMContentLoaded', checkStatus);
+window.addEventListener('DOMContentLoaded', () => {
+  checkStatus();
+  loadProfileFromStorage();
+});
+
+/* ════════════════════════════════════════════════════════════════
+   PATHWAY VISUALISATION — D3 v7 collapsible radial tree
+   ════════════════════════════════════════════════════════════════ */
+
+/* ── 1. Full Canada PR pathway data ──────────────────────────── */
+const PATHWAY_DATA = {
+  id: "root",
+  name: "Canada PR Pathways",
+  desc: "All permanent residency routes available to most foreign nationals.",
+  type: "root",
+  children: [
+    // ───────────────────────────────────────────────
+    // FEDERAL ECONOMIC
+    // ───────────────────────────────────────────────
+    {
+      id: "federal",
+      name: "Federal Economic",
+      desc: "Programs managed directly by IRCC using a national pool.",
+      type: "category",
+      url: "https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada.html",
+      children: [
+        {
+          id: "ee",
+          name: "Express Entry",
+          desc: "Points-based CRS system. Invitations issued in rounds of draws.",
+          type: "program",
+          url: "https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada/express-entry.html",
+          reqs: [
+            { text: "Must meet eligibility for FSW, CEC, or FSTP", key: "ee_base" }
+          ],
+          children: [
+            {
+              id: "fsw",
+              name: "Federal Skilled Worker (FSW)",
+              desc: "For skilled workers with foreign or mixed experience. Must score ≥67/100 on six selection factors.",
+              type: "stream",
+              url: "https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada/express-entry/who-can-apply/federal-skilled-workers.html",
+              reqs: [
+                { text: "≥1 year continuous skilled work experience (NOC TEER 0/1/2/3)", key: "work_exp" },
+                { text: "Language: CLB 7 minimum in all 4 skills", key: "clb_7" },
+                { text: "Educational Credential Assessment (ECA) if foreign degree", key: "no_canadian_degree" },
+                { text: "Proof of funds (unless valid Canadian work offer/permit)", key: "funds" }
+              ]
+            },
+            {
+              id: "cec",
+              name: "Canadian Experience Class (CEC)",
+              desc: "For candidates with recent eligible skilled Canadian work experience.",
+              type: "stream",
+              url: "https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada/express-entry/who-can-apply/canadian-experience-class.html",
+              reqs: [
+                { text: "≥12 months full-time skilled Canadian work experience in last 3 years", key: "can_work_12" },
+                { text: "NOC TEER 0 or 1: CLB 7; NOC TEER 2/3: CLB 5 minimum", key: "clb_5" }
+              ]
+            },
+            {
+              id: "fstp",
+              name: "Federal Skilled Trades (FSTP)",
+              desc: "For qualified skilled trades workers. Less common pathway.",
+              type: "stream",
+              url: "https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada/express-entry/who-can-apply/federal-skilled-trades.html",
+              reqs: [
+                { text: "≥2 years full-time skilled trades work experience", key: "trades_exp" },
+                { text: "Valid job offer OR Certificate of Qualification in Canada", key: "job_offer_or_cert" },
+                { text: "CLB 5 (speaking/listening), CLB 4 (reading/writing)", key: "clb_4" }
+              ]
+            }
+          ]
+        },
+        {
+          id: "rural",
+          name: "Rural & Northern Immigration Pilot",
+          desc: "Pilot program for smaller communities. Check active communities.",
+          type: "program",
+          url: "https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada/rural-northern-immigration-pilot.html",
+          reqs: [
+            { text: "Job offer from eligible community employer", key: "job_offer" },
+            { text: "Meet NOC and language requirements", key: "lang_general" }
+          ]
+        },
+        {
+          id: "atlantic",
+          name: "Atlantic Immigration Program",
+          desc: "Employer-driven program for Atlantic provinces (NB, NS, PEI, NL).",
+          type: "program",
+          url: "https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada/atlantic-immigration.html",
+          reqs: [
+            { text: "Designated employer job offer in Atlantic Canada", key: "atlantic_job" },
+            { text: "Meet education and language thresholds", key: "lang_general" }
+          ]
+        },
+        {
+          id: "startup",
+          name: "Start-Up Visa",
+          desc: "For entrepreneurs with innovative business ideas backed by Canadian VCs, angel investors, or incubators.",
+          type: "program",
+          url: "https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada/start-visa.html",
+          reqs: [
+            { text: "Letter of support from designated organization", key: "startup_support" },
+            { text: "Language: CLB 5 minimum in all 4 skills", key: "clb_5" },
+            { text: "Sufficient settlement funds", key: "funds" }
+          ]
+        },
+        {
+          id: "selfemployed",
+          name: "Self-Employed Persons",
+          desc: "For artists, athletes, or farm managers with 2+ years of relevant experience.",
+          type: "program",
+          url: "https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada/self-employed.html",
+          reqs: [
+            { text: "≥2 years relevant experience (cultural/athletic OR farm management)", key: "work_exp" },
+            { text: "Intention and ability to be self-employed in Canada", key: "self_emp_intent" }
+          ]
+        }
+      ]
+    },
+
+    // ───────────────────────────────────────────────
+    // PROVINCIAL NOMINEE PROGRAMS
+    // ───────────────────────────────────────────────
+    {
+      id: "pnp",
+      name: "Provincial Nominee Programs (PNP)",
+      desc: "Each province/territory nominates applicants based on local labour market needs.",
+      type: "category",
+      url: "https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada/provincial-nominees.html",
+      children: [
+        // ONTARIO
+        {
+          id: "oinp",
+          name: "Ontario (OINP)",
+          desc: "Ontario Immigrant Nominee Program — Canada's largest PNP.",
+          type: "program",
+          url: "https://www.ontario.ca/page/ontario-immigrant-nominee-program-oinp",
+          children: [
+            {
+              id: "oinp-ee",
+              name: "OINP Enhanced — EE-Linked Streams",
+              desc: "Ontario nominates Express Entry candidates from federal EE pool. Adds 600 CRS points.",
+              type: "stream",
+              url: "https://www.ontario.ca/page/ontario-immigrant-nominee-program-oinp",
+              children: [
+                {
+                  id: "oinp-hcp",
+                  name: "Human Capital Priorities",
+                  desc: "OINP proactively searches EE pool for eligible workers. No direct application — OINP sends NOI.",
+                  type: "leaf",
+                  url: "https://www.ontario.ca/page/oinp-human-capital-priorities-stream",
+                  reqs: [
+                    { text: "Active EE profile with CRS ≥400 (indicative)", key: "ee_base" },
+                    { text: "Masters or PhD from Ontario: waives some requirements", key: "ontario_edu" },
+                    { text: "NOC TEER 0/1/2/3 work experience", key: "work_exp" }
+                  ]
+                },
+                {
+                  id: "oinp-french",
+                  name: "French-Speaking Skilled Worker",
+                  desc: "For French-speaking skilled workers nationally in demand.",
+                  type: "leaf",
+                  url: "https://www.ontario.ca/page/oinp-french-speaking-skilled-worker-stream",
+                  reqs: [
+                    { text: "Active EE profile", key: "ee_base" },
+                    { text: "French: CLB 7 (speaking/listening), CLB 6 (reading)", key: "french_lang" },
+                    { text: "English: CLB 6 all skills", key: "clb_6" }
+                  ]
+                },
+                {
+                  id: "oinp-skilled-trades",
+                  name: "Skilled Trades Stream",
+                  desc: "Supports EE candidates in in-demand trades.",
+                  type: "leaf",
+                  url: "https://www.ontario.ca/page/oinp-skilled-trades-stream",
+                  reqs: [
+                    { text: "Active EE profile eligible under FSTP", key: "ee_base" },
+                    { text: "Valid Certificate of Qualification or job offer", key: "job_offer_or_cert" }
+                  ]
+                }
+              ]
+            },
+            {
+              id: "oinp-base",
+              name: "OINP Base — Non-EE Streams",
+              desc: "Employer-driven or education-driven streams for candidates not in EE pool.",
+              type: "stream",
+              url: "https://www.ontario.ca/page/ontario-immigrant-nominee-program-oinp",
+              children: [
+                {
+                  id: "oinp-masters",
+                  name: "Masters Graduate Stream",
+                  desc: "For recent masters graduates from eligible Ontario universities. No job offer required.",
+                  type: "leaf",
+                  url: "https://www.ontario.ca/page/oinp-masters-graduate-stream",
+                  reqs: [
+                    { text: "Masters degree from eligible Ontario university (within 2 years)", key: "ont_masters" },
+                    { text: "Resided in Ontario while studying", key: "ontario_residency" },
+                    { text: "Language: CLB 7", key: "clb_7" },
+                    { text: "Intention to reside in Ontario", key: "ontario_intent" }
+                  ]
+                },
+                {
+                  id: "oinp-phd",
+                  name: "PhD Graduate Stream",
+                  desc: "For recent PhD graduates from eligible Ontario universities. No job offer required.",
+                  type: "leaf",
+                  url: "https://www.ontario.ca/page/oinp-phd-graduate-stream",
+                  reqs: [
+                    { text: "PhD from eligible Ontario university (within 2 years)", key: "ont_phd" },
+                    { text: "Resided in Ontario while studying", key: "ontario_residency" }
+                  ]
+                },
+                {
+                  id: "oinp-intl-student",
+                  name: "International Student — Employer Job Offer",
+                  desc: "For recent Ontario graduates with a qualifying employer job offer.",
+                  type: "leaf",
+                  url: "https://www.ontario.ca/page/oinp-employer-job-offer-international-student-stream",
+                  reqs: [
+                    { text: "2-year diploma/degree+ from eligible Ontario institution", key: "ontario_edu" },
+                    { text: "Full-time job offer from Ontario employer (NOC TEER 0/1/2/3)", key: "job_offer" },
+                    { text: "Language: CLB 7", key: "clb_7" }
+                  ]
+                },
+                {
+                  id: "oinp-foreign-worker",
+                  name: "Foreign Worker — Employer Job Offer",
+                  desc: "For skilled workers outside Ontario with a qualifying Ontario job offer.",
+                  type: "leaf",
+                  url: "https://www.ontario.ca/page/oinp-employer-job-offer-foreign-worker-stream",
+                  reqs: [
+                    { text: "Full-time permanent job offer from Ontario employer (NOC TEER 0/1/2/3)", key: "job_offer" },
+                    { text: "≥2 years of work experience in the job NOC", key: "work_exp" },
+                    { text: "Language: CLB 7 (or meet NOC requirements)", key: "clb_7" }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+
+        // BC
+        {
+          id: "bcpnp",
+          name: "British Columbia (BC PNP)",
+          desc: "Skills Immigration and BC PNP Express Entry streams.",
+          type: "program",
+          url: "https://www.welcomebc.ca/Immigrate-to-B-C/BC-PNP-Skills-Immigration",
+          children: [
+            {
+              id: "bc-si",
+              name: "Skills Immigration",
+              desc: "Employer-driven streams for skilled/semi-skilled workers.",
+              type: "stream",
+              url: "https://www.welcomebc.ca/Immigrate-to-B-C/BC-PNP-Skills-Immigration",
+              reqs: [
+                { text: "BC employer job offer in eligible NOC", key: "job_offer" },
+                { text: "Meet wage and experience requirements", key: "work_exp" }
+              ]
+            },
+            {
+              id: "bc-ee",
+              name: "BC PNP Express Entry BC",
+              desc: "Aligns with federal EE — adds 600 CRS points on nomination.",
+              type: "stream",
+              url: "https://www.welcomebc.ca/Immigrate-to-B-C/BC-PNP-Skills-Immigration/Express-Entry-BC",
+              reqs: [
+                { text: "Active EE profile", key: "ee_base" },
+                { text: "BC employer job offer or BC graduate", key: "job_offer" }
+              ]
+            },
+            {
+              id: "bc-tech",
+              name: "Tech Pilot",
+              desc: "Fast-tracked pathway for workers in BC's tech sector NOCs.",
+              type: "stream",
+              url: "https://www.welcomebc.ca/Immigrate-to-B-C/BC-PNP-Tech-Pilot",
+              reqs: [
+                { text: "Job offer in eligible tech NOC in BC", key: "job_offer" },
+                { text: "Valid work permit or recent graduate", key: "status_work_permit" }
+              ]
+            }
+          ]
+        },
+
+        // ALBERTA
+        {
+          id: "aipp",
+          name: "Alberta (AAIP)",
+          desc: "Alberta Advantage Immigration Program (formerly AINP).",
+          type: "program",
+          url: "https://www.alberta.ca/alberta-advantage-immigration-program",
+          children: [
+            {
+              id: "ab-express",
+              name: "Alberta Express Entry Stream",
+              desc: "AAIP nominates candidates from federal EE pool with ties to Alberta.",
+              type: "stream",
+              url: "https://www.alberta.ca/aaip-alberta-express-entry-stream",
+              reqs: [
+                { text: "Active EE profile", key: "ee_base" },
+                { text: "Ties to Alberta (work experience, family, or education)", key: "ab_ties" }
+              ]
+            },
+            {
+              id: "ab-employer",
+              name: "Alberta Opportunity Stream",
+              desc: "For workers currently working in Alberta with an employer offer.",
+              type: "stream",
+              url: "https://www.alberta.ca/aaip-alberta-opportunity-stream",
+              reqs: [
+                { text: "Currently working in Alberta on valid work permit", key: "status_work_permit" },
+                { text: "Full-time permanent job offer from Alberta employer", key: "job_offer" }
+              ]
+            }
+          ]
+        },
+
+        // Other provinces (collapsed by default)
+        {
+          id: "mb",
+          name: "Manitoba (MPNP)",
+          desc: "Manitoba Provincial Nominee Program — labour market-driven streams.",
+          type: "program",
+          url: "https://immigratemanitoba.com",
+          reqs: [
+            { text: "Connection to Manitoba (job offer, family, or invitation)", key: "mb_ties" }
+          ]
+        },
+        {
+          id: "sk",
+          name: "Saskatchewan (SINP)",
+          desc: "Saskatchewan Immigrant Nominee Program — Express Entry and Occupation In-Demand streams.",
+          type: "program",
+          url: "https://www.saskatchewan.ca/residents/moving-to-saskatchewan/immigrate-to-saskatchewan",
+          reqs: [
+            { text: "Occupation in demand OR Saskatchewan job offer/ties", key: "sk_ties" }
+          ]
+        },
+        {
+          id: "ns",
+          name: "Nova Scotia (NSNP)",
+          desc: "Nova Scotia Nominee Program — multiple streams including NS Experience.",
+          type: "program",
+          url: "https://novascotiaimmigration.com",
+          reqs: [{ text: "Living/working in Nova Scotia or meet stream requirements", key: "ns_ties" }]
+        },
+        {
+          id: "nb",
+          name: "New Brunswick (NBPNP)",
+          desc: "New Brunswick Provincial Nominee Program.",
+          type: "program",
+          url: "https://www.welcomenb.ca/contents/en-CA/how-to-immigrate.html",
+          reqs: [{ text: "Connection to New Brunswick (job/education/residency)", key: "nb_ties" }]
+        },
+        {
+          id: "pei",
+          name: "PEI PNP",
+          desc: "PEI Office of Immigration — Labour, Business, and Express Entry streams.",
+          type: "program",
+          url: "https://www.princeedwardisland.ca/en/topic/office-of-immigration",
+          reqs: [{ text: "Connection to PEI or eligible PEI job offer", key: "pei_ties" }]
+        }
+      ]
+    },
+
+    // ───────────────────────────────────────────────
+    // QUEBEC
+    // ───────────────────────────────────────────────
+    {
+      id: "quebec",
+      name: "Quebec Programs",
+      desc: "Quebec selects its own economic immigrants. Federal EE does not apply to Quebec.",
+      type: "category",
+      url: "https://www.quebec.ca/en/immigration/permanent",
+      children: [
+        {
+          id: "qc-skilled",
+          name: "Quebec Skilled Worker (QSW)",
+          desc: "Points-based selection by MIFI. Candidates must score on Quebec's grid (grille de sélection).",
+          type: "stream",
+          url: "https://www.quebec.ca/en/immigration/permanent/skilled-workers",
+          reqs: [
+            { text: "French language: functional level strongly preferred (points advantage)", key: "french_lang" },
+            { text: "Score sufficiently on Quebec selection grid", key: "qc_grid" },
+            { text: "Intention to settle in Quebec", key: "qc_intent" }
+          ]
+        },
+        {
+          id: "qc-exp",
+          name: "Quebec Experience Program (PEQ)",
+          desc: "For temporary foreign workers and international students who already work/study in Quebec.",
+          type: "stream",
+          url: "https://www.quebec.ca/en/immigration/permanent/experience-program",
+          reqs: [
+            { text: "Currently living and working/studying in Quebec", key: "qc_residency" },
+            { text: "French: Level 7 (advanced intermediate) minimum", key: "french_lang" }
+          ]
+        },
+        {
+          id: "qc-entrepreneur",
+          name: "Quebec Entrepreneur/Investor",
+          desc: "For investors and entrepreneurs who wish to settle in Quebec.",
+          type: "stream",
+          url: "https://www.quebec.ca/en/immigration/permanent/business-immigration",
+          reqs: [
+            { text: "Significant net worth and business/investment plan for Quebec", key: "qc_business" },
+            { text: "French is a strong asset", key: "french_lang" }
+          ]
+        }
+      ]
+    },
+
+    // ───────────────────────────────────────────────
+    // FAMILY & HUMANITARIAN
+    // ───────────────────────────────────────────────
+    {
+      id: "family",
+      name: "Family Sponsorship",
+      desc: "Canadian citizens/PRs can sponsor eligible family members.",
+      type: "category",
+      url: "https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada/family-sponsorship.html",
+      children: [
+        {
+          id: "fam-spouse",
+          name: "Sponsor Spouse / Common-law Partner",
+          desc: "Sponsoring a spouse or common-law partner for permanent residency.",
+          type: "stream",
+          url: "https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada/family-sponsorship/spouse-partner.html",
+          reqs: [{ text: "Sponsor must be Canadian citizen or PR, ≥18 years old", key: "sponsor" }]
+        },
+        {
+          id: "fam-parent",
+          name: "Sponsor Parents & Grandparents",
+          desc: "Annual lottery (PGP) — limited spaces each year. Proof of income required.",
+          type: "stream",
+          url: "https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada/family-sponsorship/parent-grandparent-program.html",
+          reqs: [
+            { text: "Sponsor must meet minimum necessary income (3-year average)", key: "sponsor" },
+            { text: "Entered in annual PGP interest to sponsor pool", key: "sponsor" }
+          ]
+        }
+      ]
+    },
+
+    // ───────────────────────────────────────────────
+    // HUMANITARIAN & SPECIAL
+    // ───────────────────────────────────────────────
+    {
+      id: "special",
+      name: "Humanitarian & Special",
+      desc: "Refugee protection, H&C grounds, and special public interest programs.",
+      type: "category",
+      url: "https://www.canada.ca/en/immigration-refugees-citizenship/services/refugees.html",
+      children: [
+        {
+          id: "refugee",
+          name: "Refugee Protection",
+          desc: "Convention refugees, Government-Assisted Refugees (GAR), and Privately Sponsored Refugees (PSR).",
+          type: "stream",
+          url: "https://www.canada.ca/en/immigration-refugees-citizenship/services/refugees.html",
+          reqs: [{ text: "UNHCR referral or private sponsorship group required for most categories", key: "refugee_basis" }]
+        },
+        {
+          id: "hc",
+          name: "Humanitarian & Compassionate (H&C)",
+          desc: "Last resort discretionary pathway for people who would face unusual hardship if removed.",
+          type: "stream",
+          url: "https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada/humanitarian-compassionate-grounds.html",
+          reqs: [{ text: "Must demonstrate unusual, undeserved, or disproportionate hardship", key: "hc_grounds" }]
+        }
+      ]
+    }
+  ]
+};
+
+/* ── 2. Profile eligibility evaluation (greying logic) ───────── */
+function evalProfile() {
+  const p = readProfileFromForm();
+  const clb = parseInt((p.language_score || '').replace(/.*CLB\s*/i,'')) || 0;
+  const canWork = parseInt(p.canadian_work_months) || 0;
+  const edu = (p.education_level || '').toLowerCase();
+  const jobOffer = (p.job_offer_status || '').toLowerCase();
+  const curProv  = (p.current_province || '').toLowerCase();
+  const tgtProv  = (p.target_province || '').toLowerCase();
+  const status   = (p.user_situation || '').toLowerCase();
+  const hasFrench = false; // We don't collect French score yet — always unknown
+  const isStudent = status.includes('student') || status.includes('enrolled');
+  const isWorkPermit = status.includes('work permit');
+  const ontario   = tgtProv.includes('ontario') || (tgtProv === '' && curProv.includes('ontario'));
+  const bc        = tgtProv.includes('british columbia') || tgtProv.includes('bc');
+  const alberta   = tgtProv.includes('alberta');
+  const hasDeg    = edu.includes('bachelor') || edu.includes('master') || edu.includes('doctor') || edu.includes('phd');
+  const ontarioDeg= (p.canadian_degree || '').toLowerCase().includes('yes') || (p.canadian_degree || '').toLowerCase().includes('enrolled');
+  const hasMasters= edu.includes('master');
+  const hasPhD    = edu.includes('doctor') || edu.includes('phd');
+  const hasJobOffer = jobOffer !== '' && jobOffer !== 'no job offer';
+
+  // Map keys → true (met), false (unmet), null (unknown/not collected)
+  return {
+    ee_base:           clb >= 7 && hasDeg ? true : (clb === 0 && !hasDeg ? null : clb < 5 ? false : null),
+    can_work_12:       canWork >= 12 ? true : (canWork > 0 ? false : null),
+    clb_4:             clb >= 4 ? true : (clb === 0 ? null : false),
+    clb_5:             clb >= 5 ? true : (clb === 0 ? null : false),
+    clb_6:             clb >= 6 ? true : (clb === 0 ? null : false),
+    clb_7:             clb >= 7 ? true : (clb === 0 ? null : false),
+    work_exp:          canWork >= 12 ? true : null,
+    no_canadian_degree: !ontarioDeg ? true : false,
+    funds:             null,
+    job_offer:         hasJobOffer ? true : (jobOffer === 'no job offer' ? false : null),
+    job_offer_or_cert: hasJobOffer ? true : null,
+    ontario_edu:       ontarioDeg ? true : (isStudent && ontario ? null : false),
+    ontario_residency: (curProv.includes('ontario') || (isStudent && ontario)) ? true : (ontario ? null : false),
+    ontario_intent:    ontario ? true : null,
+    ont_masters:       (hasMasters && ontarioDeg) ? true : (hasMasters ? null : false),
+    ont_phd:           (hasPhD && ontarioDeg) ? true : (hasPhD ? null : false),
+    ab_ties:           alberta ? true : null,
+    bc_ties:           bc ? true : null,
+    mb_ties:           null, sk_ties: null, ns_ties: null, nb_ties: null, pei_ties: null, atlantic_job: null,
+    qc_intent:         null, qc_grid: null, qc_residency: null, qc_business: null,
+    french_lang:       null,  // French not yet tracked
+    startup_support:   null,
+    self_emp_intent:   null,
+    trades_exp:        null,
+    sponsor:           null,
+    refugee_basis:     null,
+    hc_grounds:        null,
+    status_work_permit: isWorkPermit ? true : null,
+    lang_general:      clb >= 5 ? true : (clb === 0 ? null : false),
+  };
+}
+
+/* ── 3. D3 tree rendering ────────────────────────────────────── */
+/* All D3 state is stored on each SVG element:
+   svgEl._treeRoot       — d3.hierarchy root for that instance
+   svgEl._zoomBehavior   — zoom behaviour for that instance
+   svgEl._treeUpdate     — update(source) fn for that instance
+   svgEl._rendered       — true after first render (lazy flag for inline maps)
+*/
+let _inlineMapCounter = 0;  // unique ID counter for inline map SVG elements
+
+/* Pill layout constants */
+const PILL_H      = 28;   // pill height px
+const PILL_PAD_X  = 16;   // horizontal text padding inside pill
+const NODE_YGAP   = 46;   // vertical space allocated per node (nodeSize[0])
+const DEPTH_DX    = 230;  // horizontal distance between depth levels (nodeSize[1])
+const TRANS_MS    = 380;  // animation duration ms
+
+const NODE_COLORS = {
+  root:     '#082B21',
+  category: '#0F4C3A',
+  program:  '#127A57',
+  stream:   '#2C9F8F',
+  leaf:     '#3BB8B0',
+  dimmed:   '#C8C8C3',
+};
+const NODE_TEXT_COLOR = {
+  root:    '#FFFFFF',
+  category:'#FFFFFF',
+  program: '#FFFFFF',
+  stream:  '#FFFFFF',
+  leaf:    '#082B21',
+  dimmed:  '#888884',
+};
+
+/* Approximate pill width from label text */
+function pillWidth(name) {
+  return Math.min(Math.max(name.length * 7.2 + PILL_PAD_X * 2, 90), 210);
+}
+
+function initPathwayTree() {
+  /* No-op: state is now created per-SVG inside renderPathwayTreeIn(). */
+}
+
+function openPathwayPanel() {
+  document.getElementById('pathwayOverlay').classList.add('visible');
+  // Small delay lets the CSS opacity transition finish before D3 measures clientWidth
+  setTimeout(() => renderPathwayTree(), 50);
+}
+
+function closePathwayPanel() {
+  document.getElementById('pathwayOverlay').classList.remove('visible');
+}
+
+function expandAllNodes() {
+  const svgEl = document.getElementById('pathwaySvg');
+  if (!svgEl || !svgEl._treeRoot || !svgEl._treeUpdate) return;
+  svgEl._treeRoot.each(n => { if (n._children) n.children = n._children; });
+  svgEl._treeUpdate(svgEl._treeRoot);
+}
+
+function resetPathwayView() {
+  const svgEl = document.getElementById('pathwaySvg');
+  if (!svgEl || !svgEl._zoomBehavior) return;
+  const H = svgEl.clientHeight || 640;
+  d3.select(svgEl).transition().duration(450)
+    .call(svgEl._zoomBehavior.transform, d3.zoomIdentity.translate(60, H / 2).scale(0.85));
+}
+
+/* ── toggleInlineMap: collapses / expands an inline pathway card ── */
+function toggleInlineMap(headerEl, svgId) {
+  const body = document.getElementById('body-' + svgId);
+  const toggleBtn = headerEl.querySelector('.inline-map-toggle-btn');
+  if (!body) return;
+  const isHidden = !body.style.display || body.style.display === 'none';
+  if (isHidden) {
+    body.style.display = 'block';
+    if (toggleBtn) toggleBtn.textContent = '▲ Collapse';
+    const svgEl = document.getElementById(svgId);
+    if (svgEl && !svgEl._rendered) {
+      svgEl._rendered = true;
+      renderPathwayTreeIn(svgEl);
+    }
+  } else {
+    body.style.display = 'none';
+    if (toggleBtn) toggleBtn.textContent = '▼ Expand map';
+  }
+}
+
+/* ── expandInlineMap: expand all nodes in an inline map ── */
+function expandInlineMap(svgId) {
+  const svgEl = document.getElementById(svgId);
+  if (!svgEl || !svgEl._treeRoot || !svgEl._treeUpdate) return;
+  svgEl._treeRoot.each(n => { if (n._children) n.children = n._children; });
+  svgEl._treeUpdate(svgEl._treeRoot);
+}
+
+/* ── toggleFullscreen: enter/exit native browser fullscreen on the card ── */
+function toggleFullscreen(svgId) {
+  const card = document.getElementById('card-' + svgId);
+  if (!card) return;
+  if (!document.fullscreenElement) {
+    card.requestFullscreen().catch(() => {});
+  } else {
+    document.exitFullscreen().catch(() => {});
+  }
+}
+
+/* Keep the fullscreen button label in sync and reset view after resize */
+document.addEventListener('fullscreenchange', () => {
+  const card = document.fullscreenElement;
+  if (card && card.classList.contains('inline-map-card')) {
+    /* Entered fullscreen */
+    const btn = card.querySelector('.inline-fs-btn');
+    if (btn) btn.textContent = '✕ Exit Fullscreen';
+    const svgEl = card.querySelector('.inline-pathway-svg');
+    if (svgEl && svgEl._zoomBehavior) {
+      setTimeout(() => {
+        const H = svgEl.clientHeight || window.innerHeight;
+        d3.select(svgEl).transition().duration(350)
+          .call(svgEl._zoomBehavior.transform, d3.zoomIdentity.translate(60, H / 2).scale(0.85));
+      }, 120);
+    }
+  } else {
+    /* Exited fullscreen — reset all fs buttons */
+    document.querySelectorAll('.inline-fs-btn').forEach(btn => {
+      btn.textContent = '⛶ Fullscreen';
+    });
+  }
+});
+
+/* ── renderPathwayTree: thin wrapper for the overlay SVG ── */
+function renderPathwayTree() {
+  renderPathwayTreeIn(document.getElementById('pathwaySvg'));
+}
+
+/* ── renderPathwayTreeIn: self-contained renderer for any SVG element ──
+   Creates a fresh D3 hierarchy from PATHWAY_DATA and stores all state
+   (root, zoom, update fn) on svgEl itself so multiple instances coexist.
+*/
+function renderPathwayTreeIn(svgEl) {
+  if (!svgEl) return;
+
+  const W = svgEl.clientWidth  || 960;
+  const H = svgEl.clientHeight || 480;
+
+  /* Build fresh hierarchy */
+  const root = d3.hierarchy(PATHWAY_DATA);
+  root.each(n => {
+    n._children = n.children;
+    if (n.depth > 0) n.children = null;
+  });
+  if (root._children) root.children = root._children;
+
+  svgEl._treeRoot = root;
+
+  const d3svg = d3.select(svgEl);
+  d3svg.selectAll('*').remove();
+
+  /* ── Defs: drop shadow filter ─────────────────────────────── */
+  const defs = d3svg.append('defs');
+  const filt = defs.append('filter').attr('id','pill-shadow').attr('x','-20%').attr('y','-40%').attr('width','140%').attr('height','180%');
+  filt.append('feDropShadow').attr('dx',0).attr('dy',2).attr('stdDeviation',3).attr('flood-color','rgba(8,43,33,.18)');
+
+  const rootG = d3svg.append('g').attr('class','tree-root');
+
+  /* ── Zoom / pan ───────────────────────────────────────────── */
+  const zoom = d3.zoom()
+    .scaleExtent([0.18, 3])
+    .on('zoom', ev => rootG.attr('transform', ev.transform));
+  d3svg.call(zoom)
+       .on('dblclick.zoom', null);  // disable double-click zoom (we use dblclick for links)
+
+  svgEl._zoomBehavior = zoom;
+
+  // Initial position: root anchored left-centre
+  const initTransform = d3.zoomIdentity.translate(60, H / 2).scale(0.85);
+  d3svg.call(zoom.transform, initTransform);
+
+  /* ── Tree layout ──────────────────────────────────────────── */
+  const treeLayout = d3.tree()
+    .nodeSize([NODE_YGAP, DEPTH_DX])
+    .separation((a, b) => a.parent === b.parent ? 1.1 : 1.6);
+
+  /* ── Link / node groups (rendered in order so links are below nodes) */
+  const linkGroup = rootG.append('g').attr('class','links');
+  const nodeGroup = rootG.append('g').attr('class','nodes');
+
+  /* Store previous positions for animated transitions */
+  let prevPositions = {};
+
+  /* ── Update function (called on every toggle) ────────────── */
+  function update(source) {
+    const profile = evalProfile();
+    treeLayout(root);
+
+    const nodes = root.descendants();
+    const links = root.links();
+
+    // Build prev-position lookup (keyed by node id)
+    const srcX = source.x ?? 0;
+    const srcY = source.y ?? 0;
+
+    /* ── LINKS ───────────────────────────────────────────────── */
+    const linkPath = d => {
+      const pw = pillWidth(d.source.data.name);
+      const sx = d.source.y + pw;          // start: right edge of source pill
+      const sy = d.source.x;
+      const tx = d.target.y;               // end: left edge of target pill
+      const ty = d.target.x;
+      const mx = (sx + tx) / 2;
+      return `M${sx},${sy} C${mx},${sy} ${mx},${ty} ${tx},${ty}`;
+    };
+    const linkPathFrom = (x0, y0, x1, y1) => {
+      const mx = (y0 + y1) / 2;
+      return `M${y0},${x0} C${mx},${x0} ${mx},${x1} ${y1},${x1}`;
+    };
+
+    const link = linkGroup.selectAll('.tree-link')
+      .data(links, d => d.target.data.id);
+
+    // ENTER
+    const linkEnter = link.enter().append('path')
+      .attr('class','tree-link')
+      .attr('fill','none')
+      .attr('stroke-width', 1.8)
+      .attr('d', () => {
+        const pw = pillWidth(source.data.name);
+        return linkPathFrom(srcX, srcY + pw, srcX, srcY + pw);
+      })
+      .attr('opacity', 0);
+
+    // UPDATE + ENTER
+    linkEnter.merge(link)
+      .transition().duration(TRANS_MS).ease(d3.easeCubicInOut)
+      .attr('opacity', 1)
+      .attr('stroke', d => isDimmed(d.target, profile) ? '#DEDAD2' : '#A8D9C8')
+      .attr('stroke-dasharray', d => isDimmed(d.target, profile) ? '5 3' : null)
+      .attr('d', linkPath);
+
+    // EXIT
+    link.exit()
+      .transition().duration(TRANS_MS).ease(d3.easeCubicInOut)
+      .attr('opacity', 0)
+      .attr('d', () => {
+        const pw = pillWidth(source.data.name);
+        return linkPathFrom(srcX, srcY + pw, srcX, srcY + pw);
+      })
+      .remove();
+
+    /* ── NODES ───────────────────────────────────────────────── */
+    const node = nodeGroup.selectAll('.tree-node')
+      .data(nodes, d => d.data.id);
+
+    // ENTER
+    const nodeEnter = node.enter().append('g')
+      .attr('class','tree-node')
+      .attr('transform', `translate(${srcY},${srcX})`)
+      .attr('opacity', 0)
+      .style('cursor','pointer')
+      .on('click', (ev, d) => {
+        ev.stopPropagation();
+        toggleNode(d);
+        update(d);
+      })
+      .on('dblclick', (ev, d) => {
+        ev.stopPropagation();
+        if (d.data.url) window.open(d.data.url, '_blank', 'noopener');
+      })
+      .on('mousemove', (ev, d) => showTooltip(ev, d, profile))
+      .on('mouseleave', () => hideTooltip())
+      .on('mouseenter', function(ev, d) {
+        d3.select(this).select('.pill-rect')
+          .transition().duration(120)
+          .attr('filter','url(#pill-shadow)')
+          .style('opacity', isDimmed(d, evalProfile()) ? 0.9 : 1)
+          .attr('fill', () => {
+            const c = nodeColor(d, evalProfile());
+            // brighten by mixing with white a bit
+            return c === '#E2DED6' ? '#EDE9E1' : c;
+          });
+      });
+
+    // Pill rect
+    nodeEnter.append('rect')
+      .attr('class','pill-rect')
+      .attr('height', PILL_H)
+      .attr('y', -PILL_H / 2)
+      .attr('rx', PILL_H / 2)
+      .attr('ry', PILL_H / 2)
+      .attr('width', d => pillWidth(d.data.name))
+      .attr('fill', d => nodeColor(d, profile))
+      .attr('filter','url(#pill-shadow)');
+
+    // Pill label
+    nodeEnter.append('text')
+      .attr('class','pill-text')
+      .attr('dy','0.35em')
+      .attr('x', d => pillWidth(d.data.name) / 2)
+      .attr('text-anchor','middle')
+      .attr('fill', d => pillTextColor(d, profile))
+      .attr('font-family',"'DM Sans',sans-serif")
+      .attr('font-size', d => d.depth <= 1 ? 12.5 : 11.5)
+      .attr('font-weight', d => d.depth <= 1 ? '600' : '500')
+      .attr('pointer-events','none')
+      .text(d => {
+        const max = d.depth <= 1 ? 26 : 24;
+        return d.data.name.length > max ? d.data.name.slice(0, max - 1) + '…' : d.data.name;
+      });
+
+    // Toggle indicator dot (right edge)
+    nodeEnter.filter(d => d._children)
+      .append('circle')
+      .attr('class','toggle-dot')
+      .attr('cx', d => pillWidth(d.data.name))
+      .attr('cy', 0)
+      .attr('r', 7)
+      .attr('fill', d => isDimmed(d, profile) ? '#C8C8C3' : 'rgba(255,255,255,.25)')
+      .attr('stroke', d => isDimmed(d, profile) ? '#AAA' : 'rgba(255,255,255,.6)')
+      .attr('stroke-width', 1.5);
+
+    nodeEnter.filter(d => d._children)
+      .append('text')
+      .attr('class','toggle-label')
+      .attr('x', d => pillWidth(d.data.name))
+      .attr('dy','0.35em')
+      .attr('text-anchor','middle')
+      .attr('fill', 'rgba(255,255,255,.9)')
+      .attr('font-size', 11)
+      .attr('font-weight','700')
+      .attr('pointer-events','none')
+      .text(d => d.children ? '−' : '+');
+
+    // UPDATE+ENTER: animate to final position and update visual state
+    const nodeUpdate = nodeEnter.merge(node);
+
+    nodeUpdate.transition().duration(TRANS_MS).ease(d3.easeCubicInOut)
+      .attr('transform', d => `translate(${d.y},${d.x})`)
+      .attr('opacity', 1);
+
+    // Re-style on update (profile may have changed)
+    nodeUpdate.select('.pill-rect')
+      .transition().duration(TRANS_MS)
+      .attr('fill', d => nodeColor(d, profile))
+      .attr('width', d => pillWidth(d.data.name));
+
+    nodeUpdate.select('.pill-text')
+      .attr('fill', d => pillTextColor(d, profile));
+
+    nodeUpdate.select('.toggle-dot')
+      .attr('cx', d => pillWidth(d.data.name));
+
+    nodeUpdate.select('.toggle-label')
+      .attr('x', d => pillWidth(d.data.name))
+      .text(d => d.children ? '−' : '+');
+
+    // EXIT
+    node.exit()
+      .transition().duration(TRANS_MS).ease(d3.easeCubicInOut)
+      .attr('transform', `translate(${srcY},${srcX})`)
+      .attr('opacity', 0)
+      .remove();
+
+    // Stash positions for next transition origin
+    nodes.forEach(n => { n.x0 = n.x; n.y0 = n.y; });
+  }
+
+  svgEl._treeUpdate = update;
+  update(root);
+}
+
+/* ── Helpers ──────────────────────────────────────────────────── */
+function nodeColor(d, profile) {
+  if (isDimmed(d, profile)) return '#E2DED6';
+  return NODE_COLORS[d.data.type] || NODE_COLORS.leaf;
+}
+
+function pillTextColor(d, profile) {
+  if (isDimmed(d, profile)) return '#9E9B96';
+  return NODE_TEXT_COLOR[d.data.type] || '#082B21';
+}
+
+function isDimmed(d, profile) {
+  if (!d.data.reqs || d.depth <= 1) return false;
+  return (d.data.reqs || []).some(r => profile[r.key] === false);
+}
+
+function toggleNode(d) {
+  if (d.children) {
+    d._children = d.children;
+    d.children = null;
+  } else if (d._children) {
+    d.children = d._children;
+  }
+}
+
+/* ── 4. Tooltip ──────────────────────────────────────────────── */
+function showTooltip(event, d, profile) {
+  const tip = document.getElementById('pathwayTooltip');
+  if (!tip) return;
+
+  const reqs = d.data.reqs || [];
+  const reqHtml = reqs.length === 0 ? '' :
+    `<div class="tooltip-reqs">
+      <div class="tooltip-req-title">Key Requirements</div>
+      ${reqs.map(r => {
+        const state = profile[r.key];
+        const icon  = state === true ? '✓' : state === false ? '✗' : '?';
+        const cls   = state === true ? 'req-met' : state === false ? 'req-unmet' : 'req-unknown';
+        return `<div class="tooltip-req">
+          <span class="req-icon ${cls}">${icon}</span>
+          <span>${escHtml(r.text)}</span>
+        </div>`;
+      }).join('')}
+    </div>`;
+
+  const urlHtml = d.data.url
+    ? `<div class="tooltip-url">🔗 <a href="${d.data.url}" target="_blank" rel="noopener">${d.data.url}</a></div>`
+    : '';
+
+  tip.innerHTML = `
+    <div class="tooltip-name">${escHtml(d.data.name)}</div>
+    ${d.data.desc ? `<div class="tooltip-desc">${escHtml(d.data.desc)}</div>` : ''}
+    ${reqHtml}
+    ${urlHtml}
+    <div style="font-size:10px;color:rgba(255,255,255,.3);margin-top:6px;">Double-click to open official source</div>
+  `;
+
+  const vw = window.innerWidth, vh = window.innerHeight;
+  let left = event.clientX + 16;
+  let top  = event.clientY - 12;
+  if (left + 290 > vw) left = event.clientX - 300;
+  if (top + 250 > vh)  top  = vh - 260;
+  tip.style.left = left + 'px';
+  tip.style.top  = top  + 'px';
+  tip.classList.add('visible');
+}
+
+function hideTooltip() {
+  const tip = document.getElementById('pathwayTooltip');
+  if (tip) tip.classList.remove('visible');
+}
+
+
 
 /* ─── Light markdown renderer ───────────────────────────────── */
 function renderMarkdown(text) {
   if (!text) return '';
   let s = String(text);
 
-  // Escape HTML first (safety)
+  // 1. HTML-escape (security first)
   s = s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-  // Bold: **text** or __text__
+  // 2. Inline formatting
   s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
   s = s.replace(/__(.+?)__/g, '<strong>$1</strong>');
-
-  // Italic: *text* or _text_  (single, not inside words)
   s = s.replace(/(?<!\w)\*(?!\s)(.+?)(?<!\s)\*(?!\w)/g, '<em>$1</em>');
-
-  // Inline code
   s = s.replace(/`([^`]+)`/g, '<code style="background:var(--cream-dk);padding:1px 5px;border-radius:3px;font-family:DM Mono,monospace;font-size:0.9em;">$1</code>');
 
-  // Process line by line for lists and paragraphs
-  const lines = s.split('\n');
-  const out = [];
-  let inList = false;
+  // 3. Collapse 3+ consecutive blank lines → 2
+  s = s.replace(/\n{3,}/g, '\n\n');
+
+  const lines    = s.split('\n');
+  const out      = [];
+  let listType   = null;   // 'ol' | 'ul' | null
+  let paraLines  = [];     // buffer for consecutive prose lines
+
+  const flushPara = () => {
+    if (!paraLines.length) return;
+    out.push('<p>' + paraLines.join('<br>') + '</p>');
+    paraLines = [];
+  };
+
+  const closeList = () => {
+    if (!listType) return;
+    out.push(listType === 'ol' ? '</ol>' : '</ul>');
+    listType = null;
+  };
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const trimmed = line.trim();
+    const trimmed = lines[i].trim();
+    const isOl = /^\d+[.)]\s/.test(trimmed);
+    const isUl = /^[-•*]\s/.test(trimmed) && trimmed.length > 2;
 
-    // Numbered list item: "1. text" or "1) text"
-    if (/^\d+[.)]\ /.test(trimmed)) {
-      if (!inList) { out.push('<ol style="margin:8px 0 8px 20px;line-height:1.8;">'); inList = 'ol'; }
-      else if (inList === 'ul') { out.push('</ul><ol style="margin:8px 0 8px 20px;line-height:1.8;">'); inList = 'ol'; }
-      out.push('<li>' + trimmed.replace(/^\d+[.)]\s+/, '') + '</li>');
+    if (isOl || isUl) {
+      // ── List item ──────────────────────────────────────────────────────────
+      flushPara();
+      const type = isOl ? 'ol' : 'ul';
+      if (listType !== type) { closeList(); out.push(`<${type}>`); listType = type; }
+      out.push('<li>' + trimmed.replace(/^(\d+[.)]\s+|[-•*]\s+)/, '') + '</li>');
 
-    // Bullet list item: "- text" or "• text"
-    } else if (/^[-•*]\s/.test(trimmed) && trimmed.length > 2) {
-      if (!inList) { out.push('<ul style="margin:8px 0 8px 20px;line-height:1.8;">'); inList = 'ul'; }
-      else if (inList === 'ol') { out.push('</ol><ul style="margin:8px 0 8px 20px;line-height:1.8;">'); inList = 'ul'; }
-      out.push('<li>' + trimmed.replace(/^[-•*]\s+/, '') + '</li>');
-
-    // Blank line: close any open list, add spacing
     } else if (trimmed === '') {
-      if (inList) { out.push(inList === 'ol' ? '</ol>' : '</ul>'); inList = false; }
-      out.push('<div style="height:6px;"></div>');
+      // ── Blank line ─────────────────────────────────────────────────────────
+      // If the next non-blank line continues the current list type, skip the
+      // blank (LLMs often emit blank lines between list items — just ignore).
+      let j = i + 1;
+      while (j < lines.length && lines[j].trim() === '') j++;
+      const next     = j < lines.length ? lines[j].trim() : '';
+      const nextIsOl = /^\d+[.)]\s/.test(next);
+      const nextIsUl = /^[-•*]\s/.test(next) && next.length > 2;
+      if ((listType === 'ol' && nextIsOl) || (listType === 'ul' && nextIsUl)) {
+        i = j - 1;   // advance past all the blank lines
+        continue;
+      }
+      closeList();
+      flushPara();
 
-    // Regular line
     } else {
-      if (inList) { out.push(inList === 'ol' ? '</ol>' : '</ul>'); inList = false; }
-      out.push('<span>' + line + '</span><br>');
+      // ── Regular text line ──────────────────────────────────────────────────
+      // A line consisting entirely of a bold span becomes a section heading.
+      const boldOnly = /^<strong>[^<]+<\/strong>:?$/.test(trimmed);
+      if (boldOnly) {
+        closeList();
+        flushPara();
+        out.push('<p class="answer-section-hd">' + trimmed + '</p>');
+      } else {
+        closeList();
+        paraLines.push(trimmed);
+      }
     }
   }
-  if (inList) out.push(inList === 'ol' ? '</ol>' : '</ul>');
 
-  return out.join('\n');
+  closeList();
+  flushPara();
+  return out.join('');
 }
 </script>
 </body>

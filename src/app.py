@@ -93,7 +93,13 @@ class SessionStore:
         machine = IntakeStateMachine()
         session = machine.start_session()
         session_id = str(uuid.uuid4())
-        self._sessions[session_id] = {"machine": machine, "session": session, "original_query": None}
+        self._sessions[session_id] = {
+            "machine": machine,
+            "session": session,
+            "original_query": None,
+            "current_question": None,
+            "conv_history": [],   # list of {"role": "user"|"assistant", "content": str}
+        }
         return session_id
 
     def get(self, session_id: str) -> dict | None:
@@ -193,13 +199,49 @@ def chat():
     # routing detect_intent() on them gives the wrong action type.
     if data["original_query"] is None:
         data["original_query"] = message
-    
+
     # Snapshot state BEFORE process_turn to detect the ready transition.
+    # This must happen before form overrides so that form-driven state changes
+    # don't affect the first-message routing logic.
     was_ready_before = session.state.value in (
         "ready_to_match", "matching_done", "low_confidence_match"
     )
-    
+
+    # Snapshot profile before conversation extraction (for P2: extracted_fields diff)
+    profile_before_intake = session.profile.model_dump()
+
     turn = machine.process_turn(session, message)
+
+    # ── Compute conversation-extracted fields (for frontend form sync) ────────
+    profile_after_intake = session.profile.model_dump()
+    extracted_fields = {
+        k: v for k, v in profile_after_intake.items()
+        if v is not None and v != profile_before_intake.get(k)
+    }
+
+    # ── Apply profile overrides from the frontend form ───────────────────────
+    # Applied AFTER process_turn so form-set values always win over conversation
+    # extraction. Blank form fields (not sent by frontend) leave conversation
+    # values untouched.
+    profile_overrides = {k: v for k, v in (body.get("profile_overrides") or {}).items()
+                         if v is not None and v != ""}
+    if profile_overrides:
+        from src.schemas import IntakeProfile
+        d = session.profile.model_dump()
+        d.update(profile_overrides)
+        session.profile = IntakeProfile(**d)
+
+        # If required fields are now filled, skip intake collection entirely
+        from src.intake import assess_completeness, IntakeMode, ConversationState
+        completeness = assess_completeness(session.profile)
+        if completeness.mode in (IntakeMode.FULL_MATCHING, IntakeMode.LOW_CONFIDENCE):
+            if session.state.value not in ("ready_to_match", "matching_done", "low_confidence_match"):
+                session.state = ConversationState.READY_TO_MATCH
+            # Propagate readiness to the current turn so the intake question is
+            # not shown when the sidebar form already has the required fields.
+            if not turn.ready_for_retrieval:
+                turn.ready_for_retrieval = True
+                turn.agent_message = ""
 
     # Bypass profile-collection gate for factual / general / L3 queries.
     # These don't need personal profile fields — answer immediately without
@@ -225,6 +267,7 @@ def chat():
         "ready_for_retrieval": turn.ready_for_retrieval,
         "action_route": turn.action_route.value if turn.action_route else None,
         "confidence_warning": turn.confidence_warning or "",
+        "extracted_fields": extracted_fields,
     }
 
     if not turn.ready_for_retrieval:
@@ -236,18 +279,43 @@ def chat():
     # ── Ready — run the full pipeline ────────────────────────────────────────
     try:
         from src.orchestrator import run_pipeline
-        # When the session just became ready, the triggering message was an
-        # intake answer ("I do not have a job offer"), not the actual question.
-        # Use the original question for the pipeline query in that case.
-        # On follow-up turns the session was already ready, so the current
-        # message IS the new question.
-        pipeline_query = message if was_ready_before else (data["original_query"] or message)
+        # Determine the query to pass to the pipeline.
+        if was_ready_before:
+            msg_lower = message.lower()
+            is_new_question = (
+                '?' in message
+                or any(msg_lower.startswith(w) for w in [
+                    'what', 'how', 'which', 'why', 'when', 'where', 'who',
+                    'am i', 'can i', 'do i', 'will i', 'would i', 'is there',
+                    'are there', 'tell me', 'show me', 'explain',
+                ])
+                or any(kw in msg_lower for kw in [
+                    'eligible', 'qualify', 'pathway', 'document', 'calculate',
+                    'crs', 'score', 'option', 'program', 'stream', 'apply',
+                ])
+            )
+            if is_new_question:
+                data["current_question"] = message
+            pipeline_query = data.get("current_question") or data["original_query"] or message
+        else:
+            pipeline_query = data["original_query"] or message
+            if pipeline_query:
+                data["current_question"] = pipeline_query
         session.profile.query = pipeline_query
-        answer = run_pipeline(session.profile)
+
+        # Append this user turn to conversation history before calling pipeline
+        conv_history: list[dict] = data.setdefault("conv_history", [])
+        conv_history.append({"role": "user", "content": pipeline_query})
+
+        answer = run_pipeline(session.profile, conv_history=conv_history)
+
+        # Append assistant answer to history (plain text, no citations)
+        clean_answer = _clean_answer_text(answer.answer)
+        conv_history.append({"role": "assistant", "content": clean_answer})
 
         base["type"] = "answer"
         base["agent_message"] = turn.agent_message  # acknowledgment / transition msg
-        base["answer"] = _clean_answer_text(answer.answer)
+        base["answer"] = clean_answer
         base["risk_level"] = answer.risk_level.value
         base["action_type"] = answer.action_type.value if answer.action_type else None
         base["citations"] = [c.model_dump() for c in answer.citations]

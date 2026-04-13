@@ -121,6 +121,8 @@ OPTIONAL_FIELDS: list[str] = [
     "spouse_education",
     "spouse_language_score",
     "spouse_canadian_work_months",
+    "immigration_status",
+    "work_permit_type",
 ]
 
 # Human-readable labels and clarification prompts for each required field
@@ -521,17 +523,15 @@ class IntakeStateMachine:
     # ── Private helpers ──────────────────────────────────────────────────────
 
     def _greeting_message(self, completeness: IntakeCompleteness) -> str:
-        """Build the initial greeting + first question(s)."""
-        questions = self._build_questions(
-            completeness.missing_required,
-            max_q=self._MAX_QUESTIONS_PER_TURN,
-        )
+        """Build the initial greeting message. No upfront intake questions —
+        the user can fill the sidebar profile or just chat naturally."""
         return (
-            "Hello! I'm your Canada Immigration & PR Navigator. "
-            "I can help you explore PR pathways, check your eligibility, "
-            "estimate your CRS score, and build a document checklist.\n\n"
-            "To get started, I need a few details about your background:\n\n"
-            + questions
+            "Hello! I'm your Canada Immigration & PR Navigator — I can help you "
+            "explore PR pathways, check eligibility, estimate your CRS score, "
+            "and build a document checklist.\n\n"
+            "You can fill in your profile in the sidebar on the left, or just tell "
+            "me about your situation in plain language.\n\n"
+            "What would you like to know?"
         )
 
     def _build_questions(
@@ -606,7 +606,12 @@ def _extract_fields_llm(user_text: str) -> dict | None:
             "  graduation_date   : e.g. June 2024\n"
             "  canadian_work_months : integer, months of skilled work IN Canada\n"
             "  noc_code          : NOC code string if mentioned\n"
-            "  foreign_work_months  : integer, months of skilled work outside Canada\n\n"
+            "  foreign_work_months  : integer, months of skilled work outside Canada\n"
+            "  immigration_status   : one of 'International Student', 'Work Permit Holder',\n"
+            "                         'Visitor / No Permit', 'Outside Canada', 'Permanent Resident'\n"
+            "  work_permit_type     : one of 'PGWP', 'LMIA / Employer-Specific',\n"
+            "                         'Intra-Company (ICT)', 'IEC Working Holiday', 'Other'\n"
+            "                         (only extract if user explicitly mentions a work permit type)\n\n"
             "Rules:\n"
             "  - current_province and target_province must be Canadian provinces only.\n"
             "  - Return {} if no intake fields are present.\n\n"
@@ -683,6 +688,20 @@ def _extract_fields_llm(user_text: str) -> dict | None:
         fwm = extracted.get("foreign_work_months")
         if isinstance(fwm, (int, float)):
             cleaned["foreign_work_months"] = int(fwm)
+
+        VALID_IMMIGRATION_STATUSES = {
+            "International Student", "Work Permit Holder",
+            "Visitor / No Permit", "Outside Canada", "Permanent Resident",
+        }
+        if extracted.get("immigration_status") in VALID_IMMIGRATION_STATUSES:
+            cleaned["immigration_status"] = extracted["immigration_status"]
+
+        VALID_WORK_PERMIT_TYPES = {
+            "PGWP", "LMIA / Employer-Specific",
+            "Intra-Company (ICT)", "IEC Working Holiday", "Other",
+        }
+        if extracted.get("work_permit_type") in VALID_WORK_PERMIT_TYPES:
+            cleaned["work_permit_type"] = extracted["work_permit_type"]
 
         return cleaned
 

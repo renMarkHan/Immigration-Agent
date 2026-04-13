@@ -87,6 +87,8 @@ class IntakeProfile(BaseModel):
     spouse_education: str | None = None
     spouse_language_score: str | None = None
     spouse_canadian_work_months: int | None = None
+    immigration_status: str | None = None   # e.g. "Work Permit Holder", "International Student"
+    work_permit_type: str | None = None     # e.g. "PGWP", "LMIA", "ICT"
 
 
 # ---------------------------------------------------------------------------
