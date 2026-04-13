@@ -102,7 +102,8 @@ def _llm_configured() -> bool:
 INTENT_VISUALIZE  = "visualize"   # Action 1 — pathway overview / visualisation
 INTENT_MATCH      = "match"       # Action 2 — eligibility matching
 INTENT_CALCULATE  = "calculate"   # Action 3 — CRS score calculation
-INTENT_QA         = "qa"          # Action 4 — document checklist / Q&A
+INTENT_QA         = "qa"          # Action 4 — document checklist queries
+INTENT_FACTUAL    = "factual"     # Action 4 — general factual / informational Q&A
 
 # Maps intent string → ActionType enum (for FinalAnswer)
 _INTENT_TO_ACTION: dict[str, ActionType] = {
@@ -110,6 +111,7 @@ _INTENT_TO_ACTION: dict[str, ActionType] = {
     INTENT_MATCH:     ActionType.ACTION_2,
     INTENT_CALCULATE: ActionType.ACTION_3,
     INTENT_QA:        ActionType.ACTION_4,
+    INTENT_FACTUAL:   ActionType.ACTION_4,
 }
 
 # Action-specific response format instructions injected into LLM prompt
@@ -146,6 +148,15 @@ _ACTION_FORMAT: dict[str, str] = {
         "3. Separate into: Common Documents and Stream-Specific Documents.\n"
         "4. Flag any documents with long processing times (e.g. police certificates).\n"
         "5. Cite the official source URL for the checklist."
+    ),
+    INTENT_FACTUAL: (
+        "Structure your response as a clear factual answer:\n"
+        "1. Answer the question directly in 1-2 sentences.\n"
+        "2. Provide supporting context and relevant policy details from the evidence.\n"
+        "3. If the topic has multiple components (e.g. job offer affects both CRS points\n"
+        "   and stream eligibility), address each component in a short numbered section.\n"
+        "4. Close with a practical takeaway: what should the user do or know next.\n"
+        "5. Cite the official source URL for every fact stated."
     ),
 }
 
@@ -221,6 +232,23 @@ def detect_intent(user_text: str) -> str:
     """
     text_lower = user_text.lower()
 
+    # ── factual: general informational queries — checked FIRST ───────────────
+    # "explain", "how does", "affect" etc. are unambiguous factual signals.
+    # Checking these before calculate prevents "how does X affect CRS" from
+    # triggering calculate just because "crs" appears in the sentence.
+    factual_keywords = [
+        "tell me about", "tell me more", "explain", "describe",
+        "how does", "how do", "how is", "how are",
+        "why does", "why do", "why is",
+        "what happens", "what happens if", "what effect",
+        "what role", "the role of", "what impact", "what difference",
+        "affect", "affects", "impact on", "influence",
+        "learn about", "more about", "background on",
+    ]
+    for kw in factual_keywords:
+        if kw in text_lower:
+            return INTENT_FACTUAL
+
     # ── calculate: CRS / score ───────────────────────────────────────────────
     calculate_keywords = [
         "crs", "crs score", "comprehensive ranking", "my score",
@@ -243,7 +271,7 @@ def detect_intent(user_text: str) -> str:
         if kw in text_lower:
             return INTENT_VISUALIZE
 
-    # ── qa: document checklist / factual Q&A ────────────────────────────────
+    # ── qa: document checklist ───────────────────────────────────────────────
     qa_keywords = [
         "document", "documents", "checklist", "what do i need",
         "what papers", "what files", "what to submit", "required documents",
@@ -328,7 +356,7 @@ def route_risk(
     else:
         intent = INTENT_MATCH  # default when no text provided
 
-    if intent in (INTENT_CALCULATE, INTENT_QA):
+    if intent in (INTENT_CALCULATE, INTENT_QA, INTENT_FACTUAL):
         base_level = RiskLevel.L1
     else:
         base_level = RiskLevel.L2  # match or visualize
@@ -525,7 +553,8 @@ _INTENT_ACTION_NAME: dict[str, str] = {
     INTENT_VISUALIZE:  "ACTION 1 — Pathway Overview",
     INTENT_MATCH:      "ACTION 2 — Eligibility Check",
     INTENT_CALCULATE:  "ACTION 3 — CRS Score Calculation",
-    INTENT_QA:         "ACTION 4 — Document Checklist / Factual Q&A",
+    INTENT_QA:         "ACTION 4 — Document Checklist",
+    INTENT_FACTUAL:    "ACTION 4 — Factual Q&A",
 }
 
 

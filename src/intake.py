@@ -298,11 +298,17 @@ _ACTION_3_KEYWORDS: list[str] = [
     "what is my score", "my score",
 ]
 
-# ACTION_4: document checklist
+# ACTION_4: document checklist + factual informational queries
 _ACTION_4_KEYWORDS: list[str] = [
     "document", "documents", "checklist", "what do i need",
     "what papers", "what files", "what to submit", "required documents",
     "supporting documents", "proof of", "evidence of",
+    # General factual / informational queries
+    "tell me about", "tell me more", "explain", "describe",
+    "how does", "how do", "how is", "how are",
+    "why does", "why do", "why is",
+    "what happens", "affect", "affects", "impact on",
+    "learn about", "more about",
 ]
 
 
@@ -332,6 +338,22 @@ def route_scene(user_text: str) -> ActionRoute:
         ActionRoute.ACTION_1
     """
     text_lower = user_text.lower()
+
+    # Factual signals take priority over ACTION_3 keyword matching.
+    # "how does X affect CRS" should route to ACTION_4 (factual Q&A),
+    # not ACTION_3 (CRS calculator), even though "crs" appears in the text.
+    _FACTUAL_SIGNALS = [
+        "tell me about", "tell me more", "explain", "describe",
+        "how does", "how do", "how is", "how are",
+        "why does", "why do", "why is",
+        "what happens", "what effect", "what impact", "what difference",
+        "the role of", "what role",
+        "affect", "affects", "impact on", "influence",
+        "learn about", "more about",
+    ]
+    for signal in _FACTUAL_SIGNALS:
+        if signal in text_lower:
+            return ActionRoute.ACTION_4
 
     # ACTION_3: CRS / score calculation (most specific)
     for kw in _ACTION_3_KEYWORDS:
