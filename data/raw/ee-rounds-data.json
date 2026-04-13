@@ -1,0 +1,27 @@
+{
+  "_note": "Static snapshot of recent Express Entry draw results. Scraped from IRCC JSON API. Refresh by running: python -m src.fetch_draws_data",
+  "_source_url": "https://www.canada.ca/content/dam/ircc/documents/json/ee_rounds_4_en.json",
+  "_accessed_at": "2026-04-09",
+  "rounds": [
+    {"drawNumber": "321", "drawDateFull": "April 2, 2026",  "drawName": "Canadian Experience Class",                   "drawCRS": "522", "drawSize": "3500"},
+    {"drawNumber": "320", "drawDateFull": "March 19, 2026", "drawName": "No Limit",                                    "drawCRS": "489", "drawSize": "1500"},
+    {"drawNumber": "319", "drawDateFull": "March 5, 2026",  "drawName": "Canadian Experience Class",                   "drawCRS": "534", "drawSize": "3000"},
+    {"drawNumber": "318", "drawDateFull": "February 19, 2026","drawName": "No Limit",                                  "drawCRS": "488", "drawSize": "1500"},
+    {"drawNumber": "317", "drawDateFull": "February 5, 2026", "drawName": "Canadian Experience Class",                 "drawCRS": "531", "drawSize": "3500"},
+    {"drawNumber": "316", "drawDateFull": "January 22, 2026", "drawName": "No Limit",                                  "drawCRS": "490", "drawSize": "1500"},
+    {"drawNumber": "315", "drawDateFull": "January 8, 2026",  "drawName": "Provincial Nominee Program",                "drawCRS": "791", "drawSize": "591"},
+    {"drawNumber": "314", "drawDateFull": "December 18, 2025","drawName": "No Limit",                                  "drawCRS": "491", "drawSize": "1000"},
+    {"drawNumber": "313", "drawDateFull": "December 4, 2025", "drawName": "Canadian Experience Class",                 "drawCRS": "527", "drawSize": "3500"},
+    {"drawNumber": "312", "drawDateFull": "November 20, 2025","drawName": "No Limit",                                  "drawCRS": "543", "drawSize": "1000"},
+    {"drawNumber": "311", "drawDateFull": "November 6, 2025", "drawName": "Canadian Experience Class",                 "drawCRS": "541", "drawSize": "3000"},
+    {"drawNumber": "310", "drawDateFull": "October 23, 2025", "drawName": "No Limit",                                  "drawCRS": "496", "drawSize": "1000"},
+    {"drawNumber": "309", "drawDateFull": "October 9, 2025",  "drawName": "French language proficiency",               "drawCRS": "336", "drawSize": "1000"},
+    {"drawNumber": "308", "drawDateFull": "September 25, 2025","drawName": "Canadian Experience Class",                "drawCRS": "520", "drawSize": "3000"},
+    {"drawNumber": "307", "drawDateFull": "September 11, 2025","drawName": "No Limit",                                 "drawCRS": "504", "drawSize": "1000"},
+    {"drawNumber": "306", "drawDateFull": "August 28, 2025",  "drawName": "Canadian Experience Class",                 "drawCRS": "519", "drawSize": "3500"},
+    {"drawNumber": "305", "drawDateFull": "August 14, 2025",  "drawName": "No Limit",                                  "drawCRS": "503", "drawSize": "1000"},
+    {"drawNumber": "304", "drawDateFull": "July 31, 2025",    "drawName": "Canadian Experience Class",                 "drawCRS": "512", "drawSize": "3500"},
+    {"drawNumber": "303", "drawDateFull": "July 17, 2025",    "drawName": "Healthcare occupations",                    "drawCRS": "431", "drawSize": "1000"},
+    {"drawNumber": "302", "drawDateFull": "July 3, 2025",     "drawName": "No Limit",                                  "drawCRS": "500", "drawSize": "1000"}
+  ]
+}

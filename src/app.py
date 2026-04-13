@@ -201,6 +201,23 @@ def chat():
     
     turn = machine.process_turn(session, message)
 
+    # Bypass profile-collection gate for factual / general / L3 queries.
+    # These don't need personal profile fields — answer immediately without
+    # asking for age, education, etc.
+    if not turn.ready_for_retrieval:
+        from src.agent_module import (
+            detect_intent_with_confidence,
+            is_l3_query,
+            INTENT_QA,
+            INTENT_GENERAL,
+            INTENT_CALCULATE,
+        )
+        _orig = data["original_query"] or message
+        _intent, _, _, _ = detect_intent_with_confidence(_orig)
+        if _intent in (INTENT_QA, INTENT_GENERAL, INTENT_CALCULATE) or is_l3_query(_orig):
+            turn.ready_for_retrieval = True
+            turn.agent_message = ""  # suppress the profile-collection prompt
+
     base = {
         "session_id": session_id,
         "state": session.state.value,

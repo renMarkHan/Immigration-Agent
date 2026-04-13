@@ -1,14 +1,20 @@
-# Canada Immigration & PR Navigator (MVP Scaffold)
+# Canada Immigration & PR Navigator
 
-Minimal framework-first scaffold for Team 3.
+Team 3 — MVP implementation.
 
-## What this scaffold includes
+## What this project includes
 
 - Shared schema contracts for all modules (Pydantic)
-- Module stubs for each role owner
-- End-to-end orchestrator with D-003 retry behavior
-- LLM connectivity wrapper for the course endpoint
-- Eval harness stub (EDD) with sample set
+- Multi-turn intake state machine with profile collection
+- End-to-end orchestrator with intent routing, L3 safety gate, and D-003 retry logic
+- Scoring-based intent classifier (5 intents, typo-tolerant, personal-context amplifier)
+- Risk-level routing with decision trace (`risk_explain` in every response)
+- Hybrid BM25 + vector retrieval (ChromaDB, local index)
+- CRS calculator policy tool
+- Action-specific LLM prompt templates (4 action types, QA sub-type selection)
+- Flask web UI served on port 5050
+- Express Entry draw data ingestion from IRCC JSON API
+- Eval harness with intent accuracy, confusion matrix, and citation checks
 
 ## Project structure
 
@@ -17,17 +23,28 @@ Minimal framework-first scaffold for Team 3.
 ├── .env
 ├── requirements.txt
 ├── src/
-│   ├── schemas.py
-│   ├── llm_client.py
-│   ├── retrieval_module.py
-│   ├── policy_tool_module.py
-│   ├── agent_module.py
-│   ├── ingestion_module.py
-│   ├── orchestrator.py
-│   └── main.py
+│   ├── schemas.py              — Pydantic contracts (IntakeProfile, FinalAnswer, …)
+│   ├── llm_client.py           — LLM endpoint wrapper
+│   ├── orchestrator.py         — Pipeline wiring (intent → retrieval → tools → answer)
+│   ├── agent_module.py         — Intent classifier, risk routing, answer builder
+│   ├── retrieval_module.py     — Hybrid BM25 + vector retrieval (ChromaDB)
+│   ├── ingestion_module.py     — HTML scraping, chunking, indexing
+│   ├── fetch_draws_data.py     — Express Entry draw data fetcher (IRCC JSON API)
+│   ├── policy_tool_module.py   — CRS calculator, pathway backbone tools
+│   ├── intake.py               — Multi-turn intake state machine
+│   ├── app.py                  — Flask web server (port 5050)
+│   ├── chat_cli.py             — Terminal interactive chat loop
+│   ├── main.py                 — Smoke test (connectivity + mock pipeline)
+│   └── agent/
+│       └── system_prompt.py    — System prompt v1, risk-tier templates
+├── data/
+│   ├── raw/                    — Scraped HTML + ee-rounds-data.json snapshot
+│   └── processed/
+│       └── chunks.jsonl        — Chunked policy text (BM25 + embedding input)
+├── chroma_db/                  — Persistent ChromaDB vector index
 └── eval/
-    ├── samples.jsonl
-    └── run_eval.py
+    ├── samples.jsonl           — 15 eval samples (intent labels, risk levels)
+    └── run_eval.py             — Eval harness with intent confusion matrix
 ```
 
 ## Prerequisites
@@ -35,6 +52,7 @@ Minimal framework-first scaffold for Team 3.
 - Python 3.11
 - pip + venv
 - Valid student bearer token for LLM endpoint
+- ChromaDB index built (see **Build retrieval index** below)
 
 ## Environment setup
 
@@ -59,102 +77,127 @@ LLM_API_KEY=<your_student_id_token>
 LLM_MODEL=qwen3-30b-a3b-fp8
 ```
 
-## Run checks
+## Build retrieval index
 
-Run scaffold smoke checks:
+Run once before first use (or after adding new data):
 
 ```bash
-python -m src.main
+python -m src.ingestion_module
+python -m src.fetch_draws_data --offline   # inject Express Entry draw data
 ```
 
-This runs:
-- Real endpoint connectivity test
-- Mock pipeline run through orchestrator
+`--offline` uses the local snapshot in `data/raw/ee-rounds-data.json`.
+Omit `--offline` to fetch the latest draw results live from IRCC.
+
+## Launch web chatbox (recommended)
+
+```bash
+python -m src.app
+```
+
+Opens at **http://localhost:5050**. Supports free-text queries — no profile
+fields required for factual and policy questions.
 
 ## Run interactive chat CLI
 
-Run the minimal conversational CLI:
+Terminal-only, no web UI:
 
 ```bash
 python -m src.chat_cli
 ```
 
-In CLI, you can ask questions directly and use these commands:
-- /help
-- /show
-- /set province <value>
-- /set program <value>
-- /set stream <value>
-- /clear
-- /exit
+Available commands: `/help`, `/show`, `/set province <value>`,
+`/set program <value>`, `/set stream <value>`, `/clear`, `/exit`
 
-Note: This is a terminal chat loop, not a web UI.
-
-## Run Ontario retrieval process demo
-
-Run this script to demonstrate the exact process shape requested by the team:
+## Run smoke test
 
 ```bash
-python -m src.demo_ontario_flow
+python -m src.main
 ```
 
-What it demonstrates:
-- Ingest source URL: https://www.ontario.ca/page/oinp-masters-graduate-stream
-- Retrieve by query: "what is the requirement for ontario master graduate stream?"
-- Return an answer with citation fields including source URL and section title.
+Tests LLM endpoint connectivity and runs a mock pipeline pass.
 
-Scope note:
-- This is a demonstrative process implementation for teammate alignment.
-- Final production retrieval/ingestion quality remains owned by module owners.
-
-Run eval harness:
+## Run eval harness
 
 ```bash
 python -m eval.run_eval
 ```
 
-Output file:
-- `eval/results/latest.json`
+Output: `eval/results/latest.json`
+
+Metrics reported:
+- `pass_rate` — answer content + citation checks
+- `intent_accuracy` — classifier accuracy over labelled samples
+- `intent_confusion_matrix` — per-intent breakdown
+
+Intent-only fast check (no LLM call, <5 s):
+
+```bash
+python -m eval.run_eval --intent-only
+```
+
+## Keep draw data current
+
+IRCC publishes new draw results roughly every two weeks. Refresh:
+
+```bash
+python -m src.fetch_draws_data          # live fetch + rebuild index
+python -m src.fetch_draws_data --offline # rebuild from local snapshot only
+```
+
+## Run Ontario retrieval demo
+
+```bash
+python -m src.demo_ontario_flow
+```
+
+Demonstrates ingest → retrieve → cite for the OINP Masters Graduate Stream.
 
 ## Role ownership map
 
-- Role A (Ella): `src/agent_module.py`
-- Role B (Keqing): `src/retrieval_module.py`
-- Role C (Yuhan): `src/policy_tool_module.py`, `src/llm_client.py`, `src/schemas.py`
-- Role D (Chao): `src/ingestion_module.py`
-- Role E (Ehraaz): `src/orchestrator.py` integration
+- Role A (Ella): `src/agent_module.py` — intent classifier, risk routing, answer builder
+- Role B (Keqing): `src/retrieval_module.py`, `src/agent/system_prompt.py` — hybrid retrieval, system prompt
+- Role C (Yuhan): `src/policy_tool_module.py`, `src/llm_client.py`, `src/schemas.py`, `src/orchestrator.py` — tools, contracts, pipeline
+- Role D (Chao): `src/ingestion_module.py`, `src/fetch_draws_data.py` — data ingestion, draw data
+- Role E (Ehraaz): `src/app.py`, `src/intake.py` — web server, intake state machine
 
 ## Integration rules
 
 - Do not change function signatures without notifying Role E + Framework Owner.
 - Add all cross-module data fields in `src/schemas.py` only.
-- Keep citation fields intact:
-  - source_url
-  - section_or_title
-  - effective_date_or_last_updated_or_unknown
-  - accessed_at
+- Keep citation fields intact in every `FinalAnswer`:
+  - `source_url`
+  - `section_or_title`
+  - `effective_date_or_last_updated_or_unknown`
+  - `accessed_at`
 - After meaningful changes, run `python -m eval.run_eval`.
+- The intake gate in `src/app.py` is bypassed for `qa`, `general`, and `calculate`
+  intents — these query types do not require a full user profile.
 
-## Known current limitation
+## Known limitations
 
-`qwen3-30b-a3b-fp8` may consume small `max_tokens` budgets in reasoning mode and return empty `content`.
-For real generation tests, use a larger token budget (e.g., 512+).
+- `qwen3-30b-a3b-fp8` in reasoning mode consumes token budget for thinking before
+  generating output. Use `max_tokens ≥ 2048` (already set in `_call_llm`).
+- IRCC draw cutoff numbers are loaded via JavaScript on the rounds page — static
+  HTML scraping captures no actual values. Use `python -m src.fetch_draws_data`
+  to fetch the data from the IRCC JSON API instead.
+- ChromaDB default collection cap is 2000 documents; the full corpus is 2451 chunks.
+  Run `python -m src.ingestion_module` followed by `python -m src.fetch_draws_data`
+  to rebuild with the full set.
 
-- Retrieval and ingestion are still stubs until role owners complete module implementations.
+## Current implementation status
 
-## Current implementation status (for teammate handoff)
-
-- Completed:
-  - Shared contracts (schemas)
-  - Orchestrator pipeline wiring
-  - LLM endpoint client wrapper
-  - Interactive CLI entry path (`python -m src.chat_cli`)
-  - Eval harness skeleton
-- Pending for fully useful answers:
-  - Real ingestion pipeline (scrape/clean/chunk/index)
-  - Real hybrid retrieval (BM25 + vector + rerank)
-  - Agent prompt/routing and citation-grounded answer synthesis
-  - Policy tools (CRS Federal EE for MVP)
+- ✅ Shared contracts (schemas) — `FinalAnswer` includes `risk_explain`, `intent_scores`, `intent_top2`, `intent_ambiguous`
+- ✅ Orchestrator pipeline — intent → L3 safety gate → retrieval → tools → risk routing → answer → retry
+- ✅ Intent classifier — scoring-based, 5 intents, typo-tolerant, personal-context amplifier
+- ✅ Risk routing with explain trace — L1/L2/L3 with decision steps in every response
+- ✅ Hybrid retrieval — BM25 (weight 0.6) + ChromaDB vector (weight 0.4), local index
+- ✅ CRS calculator policy tool
+- ✅ Action-specific prompt templates — 4 action types; QA sub-typed (factual vs document)
+- ✅ Web UI — Flask + `python -m src.app` → http://localhost:5050
+- ✅ Multi-turn intake — bypassed for factual/policy queries that don't need profile fields
+- ✅ Express Entry draw data — `src/fetch_draws_data.py` injects cutoff history into index
+- ✅ Eval harness — pass rate, intent accuracy, confusion matrix; 11/11 intent samples pass
 
 ## Related docs
 

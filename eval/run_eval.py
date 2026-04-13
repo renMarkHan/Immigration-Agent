@@ -22,6 +22,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 
 from src.policy_tool_module import normalize_section_or_title
+from src.agent_module import detect_intent_with_confidence
 
 load_dotenv()
 
@@ -62,6 +63,24 @@ def score_sample(sample: dict, answer_obj) -> dict:
     """
     result = {"id": sample["id"], "risk_level": sample["risk_level"]}
 
+    predicted_intent, predicted_scores, predicted_top2, predicted_ambiguous = detect_intent_with_confidence(
+        sample["query"]
+    )
+    result["predicted_intent"] = predicted_intent
+    result["predicted_intent_scores"] = predicted_scores
+    result["predicted_intent_top2"] = predicted_top2
+    result["predicted_intent_ambiguous"] = predicted_ambiguous
+
+    expected_intent = sample.get("expected_intent")
+    if expected_intent:
+        result["expected_intent"] = expected_intent
+        result["intent_pass"] = (
+            predicted_intent == expected_intent
+            or (predicted_ambiguous and expected_intent in predicted_top2)
+        )
+    else:
+        result["intent_pass"] = True
+
     answer_text = (answer_obj.answer or "").lower()
 
     # Citation coverage check
@@ -92,9 +111,26 @@ def score_sample(sample: dict, answer_obj) -> dict:
     else:
         result["keyword_pass"] = True  # no keywords required
 
-    result["overall_pass"] = result["citation_pass"] and result["refusal_pass"] and result["keyword_pass"]
+    result["overall_pass"] = (
+        result["citation_pass"]
+        and result["refusal_pass"]
+        and result["keyword_pass"]
+        and result["intent_pass"]
+    )
     result["answer_preview"] = answer_text[:200]
     return result
+
+
+def _build_intent_confusion(scored: list[dict]) -> dict[str, dict[str, int]]:
+    matrix: dict[str, dict[str, int]] = {}
+    for row in scored:
+        expected = row.get("expected_intent")
+        predicted = row.get("predicted_intent")
+        if not expected:
+            continue
+        matrix.setdefault(expected, {})
+        matrix[expected][predicted] = matrix[expected].get(predicted, 0) + 1
+    return matrix
 
 
 def run_eval() -> None:
@@ -111,12 +147,19 @@ def run_eval() -> None:
 
     total = len(scored)
     passed = sum(1 for s in scored if s["overall_pass"])
+    intent_scored = [s for s in scored if s.get("expected_intent")]
+    intent_total = len(intent_scored)
+    intent_passed = sum(1 for s in intent_scored if s.get("intent_pass"))
+    intent_confusion = _build_intent_confusion(scored)
 
     summary = {
         "run_at": datetime.utcnow().isoformat(),
         "total": total,
         "passed": passed,
         "pass_rate": round(passed / total, 4) if total else 0,
+        "intent_accuracy": round(intent_passed / intent_total, 4) if intent_total else None,
+        "intent_total": intent_total,
+        "intent_confusion_matrix": intent_confusion,
         "citation_title_quality_rate": round(
             sum(1 for s in scored if s.get("citation_title_quality_pass", True)) / total,
             4,
@@ -130,6 +173,8 @@ def run_eval() -> None:
         json.dump(summary, f, indent=2, default=str)
 
     print(f"Eval complete: {passed}/{total} passed ({summary['pass_rate']:.0%})")
+    if intent_total:
+        print(f"Intent accuracy: {intent_passed}/{intent_total} ({summary['intent_accuracy']:.0%})")
     print(f"Citation title quality rate: {summary['citation_title_quality_rate']:.0%}")
     print(f"Results written to {out_path}")
 

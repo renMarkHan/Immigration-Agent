@@ -143,3 +143,7 @@ class FinalAnswer(BaseModel):
     retry_count: int = Field(default=0, description="D-003: max 1 retry allowed")
     action_type: ActionType | None = None
     confidence_warning: str | None = None
+    risk_explain: dict[str, Any] | None = None
+    intent_scores: dict[str, float] | None = None
+    intent_top2: list[str] | None = None
+    intent_ambiguous: bool = False

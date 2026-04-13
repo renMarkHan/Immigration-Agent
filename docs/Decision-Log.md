@@ -62,6 +62,33 @@ Update (Execution):
 - Follow-up Actions: Integrate IntakeStateMachine into chat CLI path for full multi-turn collection before retrieval.
 - Owner: Yuhan Ren
 
+Update (Execution):
+- Update Date: 2026-04-12
+- Change Summary: Refactored integration routing to detect intent before retrieval, added L3 fast-fail short-circuit in orchestrator, and upgraded intent classification with typo-tolerant scoring plus a new `general` intent for broad policy-update queries.
+- Why Changed: Generic policy questions were being routed through strict profile-completeness gates and surfaced data-collection behavior; L3 requests also incurred unnecessary retrieval/tool cost before refusal.
+- Expected Impact: Better UX for broad informational queries, lower latency for L3 refusals, and fewer misroutes caused by rigid keyword order.
+- Measured Result: Pipeline now short-circuits L3 prior to retrieval, uses intent-aware retrieval filters, and routes "latest policy" style questions into L1 general-info behavior.
+- Follow-up Actions: Expand eval seeds for intent robustness (mixed intent + typo cases) and tune classifier thresholds with measured confusion matrix.
+- Owner: Yuhan Ren
+
+Update (Execution):
+- Update Date: 2026-04-12
+- Change Summary: Added intent confidence outputs (scores + top2), ambiguity detection with clarification-first response, and risk-route explain traces attached to `FinalAnswer`.
+- Why Changed: Remaining routing errors came from mixed-intent wording and low-separation intent scores, and there was limited observability for why a risk level was chosen.
+- Expected Impact: Safer handling of ambiguous asks, clearer user disambiguation path, and easier debugging of risk routing decisions.
+- Measured Result: Ambiguous intent queries now return a clarification response with `intent_ambiguous=true`; L3 and non-L3 routes now expose decision steps via `risk_explain`.
+- Follow-up Actions: Use confusion-matrix results to tune ambiguity threshold and reduce unnecessary clarifications.
+- Owner: Yuhan Ren
+
+Update (Execution):
+- Update Date: 2026-04-12
+- Change Summary: Added intent-based intake bypass in `src/app.py`. Queries classified as `qa`, `general`, or `calculate` now skip the profile-collection gate and run the pipeline immediately, suppressing the "I still need more details" prompt for factual questions.
+- Why Changed: The intake state machine was blocking all first-turn queries in DATA_COLLECTION mode (profile fields missing), causing factual questions like "What is the minimum CRS score?" to receive profile-collection prompts instead of answers.
+- Expected Impact: Factual and policy questions are answered on the first turn without requiring the user to provide personal information.
+- Measured Result: "What is the minimum CRS score for Express Entry draws?" now routes directly to the pipeline; intake clarification only appears for eligibility/pathway queries that genuinely need profile context.
+- Follow-up Actions: Monitor for edge cases where a calculate query with no profile context returns a low-quality answer due to missing fields; consider a soft prompt appended to the answer rather than a blocking gate.
+- Owner: Ehraaz Atif (Integration/UX)
+
 ### D-004 Retrieval Architecture Baseline (Frozen)
 - Date: 2026-04-07
 - Owner: Team (Data/Retrieval)
@@ -95,6 +122,15 @@ Update (Execution):
 - Follow-up Actions: Add retrieval quality eval slices (keyword-vs-semantic and rerank lift), and tune reranker weights using eval outcomes.
 - Owner: Yuhan Ren
 
+Update (Execution):
+- Update Date: 2026-04-12
+- Change Summary: Added `src/fetch_draws_data.py` which fetches Express Entry draw results from the IRCC JSON API (`ee_rounds_4_en.json`) and injects two structured chunks into `chunks.jsonl` and ChromaDB: (1) a table of recent draw cutoffs, (2) a prose explanation of how cutoffs work.
+- Why Changed: The IRCC rounds page (`ee-rounds.html`) renders CRS cutoff values via JavaScript from a separate JSON API endpoint. Static HTML scraping captured only empty `<span data-json-replace="...">` placeholders — no actual numbers were indexed. This caused the agent to have zero evidence when answering questions about draw cutoffs.
+- Expected Impact: Queries about minimum/recent CRS cutoff scores now retrieve grounded evidence with specific values (e.g., 488–541 range, by draw type) and the explanation that there is no fixed minimum.
+- Measured Result: ChromaDB now contains 3 draw-URL chunks. `python -m src.fetch_draws_data --offline` runs cleanly and adds 2 structured chunks to the index.
+- Follow-up Actions: Schedule periodic refresh (`python -m src.fetch_draws_data`) after each IRCC draw round (~biweekly). Verify retrieved draw chunks surface in top-3 for EE-001 query after next index rebuild.
+- Owner: Yuhan Ren / Chao Tang (Data Ingestion)
+
 ### D-005 Eval Gates and Priorities (Frozen)
 - Date: 2026-04-07
 - Owner: Team (Eval)
@@ -119,6 +155,24 @@ Update (Execution):
 - Measured Result: Post-change eval reports `8/11 passed (73%)` and a `citation_title_quality_rate` of `91%`.
 - Follow-up Actions: Raise citation title quality toward parity with citation coverage and add targeted retrieval cleanup for remaining low-signal titles.
 - Owner: Yuhan Ren
+
+Update (Execution):
+- Update Date: 2026-04-12
+- Change Summary: Expanded eval harness with intent diagnostics: `expected_intent` checks, predicted intent details, and an intent confusion matrix summary.
+- Why Changed: Intent robustness work required measurable diagnostics beyond answer-level pass/fail to validate typo/mixed/general routing behavior.
+- Expected Impact: Faster threshold tuning and earlier detection of intent-regression patterns during daily integration.
+- Measured Result: Eval output now includes `intent_total`, `intent_accuracy`, and `intent_confusion_matrix` in `eval/results/latest.json`.
+- Follow-up Actions: Grow seed set toward 30+ with balanced intent classes and periodic manual adjudication for borderline mixed-intent prompts.
+- Owner: Yuhan Ren
+
+Update (Execution):
+- Update Date: 2026-04-12
+- Change Summary: (1) Fixed intent classifier precision: removed `"crs"` and `"crs score"` from `calculate` mild keywords (they are domain vocabulary, not task signals); added personal-pronoun amplifier patterns (+3.0 each) that only fire when the user refers to their own profile ("my score", "I am X years old"). (2) Split `INTENT_QA` format template into two sub-types: `factual` (direct answer + mechanism explanation, selected by default) and `document` (numbered checklist, selected when document/proof/checklist keywords are present). Format sub-selection happens at `build_answer()` time and is passed via `format_override` into `_call_llm()`. (3) Corrected `EE-001` eval label from `"calculate"` to `"qa"` — the query is factual, not a personal score calculation.
+- Why Changed: Bare "crs score" keywords were boosting `calculate` score on factual questions, creating a gap ≤ 0.36 against `qa` and triggering unnecessary disambiguation prompts. Separately, all `qa`-intent queries were being forced into a document-checklist format regardless of whether the user was asking about a document or a policy fact.
+- Expected Impact: Factual CRS questions ("what is the minimum/cutoff/requirement") route cleanly as `qa` with no ambiguity prompt. Personal CRS calculation queries ("I am 27...what is my score") still correctly route as `calculate`. Policy fact answers use a direct prose structure instead of a numbered document list.
+- Measured Result: Intent eval 11/11 PASS. EE-001 gap=0.667, win=0.833 (was gap=0.086, ambiguous=True). CRS-001 still gap=1.000 as `calculate`.
+- Follow-up Actions: Monitor `qa_document` sub-type selection accuracy for queries that mention both eligibility and documents (e.g., INT-002); adjust keyword list if misclassified.
+- Owner: Ella Lu (Agent/Prompt) / Yuhan Ren
 
 ### D-006 Team Execution Mode (Frozen)
 - Date: 2026-04-07
@@ -249,6 +303,8 @@ Copy and append this block under the relevant decision ID:
 - 2026-04-10: D-004 execution update added (Chroma vector retrieval + hybrid scoring + explicit reranker landed).
 - 2026-04-10: D-005 execution update added (citation title quality eval slice added).
 - 2026-04-10: D-003 execution update added (query text propagation into integrated risk/action routing).
+- 2026-04-12: D-003 execution update added (intent confidence/ambiguity handling + risk explain traces).
+- 2026-04-12: D-005 execution update added (intent eval diagnostics and confusion matrix).
 - 2026-04-10: D-007 execution update added (canonical ToolResult schema alignment in evidence formatting).
 - 2026-04-10: D-007 execution update added (citation title normalization applied in ingestion and retrieval).
 - 2026-04-10: D-008 execution update added (Federal EE CRS calculator and pathway backbone tool integrated).

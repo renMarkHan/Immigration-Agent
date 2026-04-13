@@ -56,7 +56,8 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Optional
+from difflib import SequenceMatcher
+from typing import Any, Optional
 
 from src.schemas import (
     ActionType,
@@ -103,6 +104,7 @@ INTENT_VISUALIZE  = "visualize"   # Action 1 — pathway overview / visualisatio
 INTENT_MATCH      = "match"       # Action 2 — eligibility matching
 INTENT_CALCULATE  = "calculate"   # Action 3 — CRS score calculation
 INTENT_QA         = "qa"          # Action 4 — document checklist / Q&A
+INTENT_GENERAL    = "general"     # General policy updates / broad informational query
 
 # Maps intent string → ActionType enum (for FinalAnswer)
 _INTENT_TO_ACTION: dict[str, ActionType] = {
@@ -110,6 +112,7 @@ _INTENT_TO_ACTION: dict[str, ActionType] = {
     INTENT_MATCH:     ActionType.ACTION_2,
     INTENT_CALCULATE: ActionType.ACTION_3,
     INTENT_QA:        ActionType.ACTION_4,
+    INTENT_GENERAL:   ActionType.ACTION_4,
 }
 
 # Action-specific response format instructions injected into LLM prompt
@@ -139,13 +142,32 @@ _ACTION_FORMAT: dict[str, str] = {
         "4. Suggest 1-2 ways the user could increase their score.\n"
         "5. Cite the official CRS grid URL."
     ),
+    # INTENT_QA has two sub-formats selected at runtime in build_answer():
+    # - INTENT_QA (factual): for yes/no, minimum/maximum, threshold questions
+    # - INTENT_QA (document): for document/checklist questions
     INTENT_QA: (
+        "Structure your response as a direct factual answer:\n"
+        "1. Answer the question directly in 1-2 sentences at the top.\n"
+        "2. Provide supporting detail: thresholds, rules, conditions, or context.\n"
+        "3. If the value varies (e.g. draw cutoffs change each round), explain the mechanism and give a realistic recent range.\n"
+        "4. State what the user should do if the value changes or they need the latest figure.\n"
+        "5. Cite the official source URL."
+    ),
+    "qa_document": (
         "Structure your response as a document checklist / Q&A answer:\n"
         "1. List all required documents in a numbered checklist.\n"
         "2. For each document: what it is, where to get it, format requirements.\n"
         "3. Separate into: Common Documents and Stream-Specific Documents.\n"
         "4. Flag any documents with long processing times (e.g. police certificates).\n"
         "5. Cite the official source URL for the checklist."
+    ),
+    INTENT_GENERAL: (
+        "Structure your response as a policy update brief:\n"
+        "1. Start with a concise summary of the latest official policy information found in evidence.\n"
+        "2. Use 3-5 bullet points for major changes, dates, and affected groups.\n"
+        "3. Clearly separate confirmed facts from unknown/not-found items.\n"
+        "4. End with what the user should verify next on official pages.\n"
+        "5. Cite the official source URL for each major point."
     ),
 }
 
@@ -184,6 +206,147 @@ _L3_PATTERNS: list[re.Pattern] = [
 ]
 
 
+def is_l3_query(user_text: str) -> bool:
+    """Return True if the query matches any high-risk refusal pattern."""
+    if not user_text:
+        return False
+    return any(pattern.search(user_text) for pattern in _L3_PATTERNS)
+
+
+def _fuzzy_contains(tokens: list[str], candidates: list[str], threshold: float = 0.86) -> bool:
+    """Light typo tolerance for short keyword cues."""
+    for token in tokens:
+        for candidate in candidates:
+            if SequenceMatcher(a=token, b=candidate).ratio() >= threshold:
+                return True
+    return False
+
+
+def _normalize_intent_scores(score: dict[str, float]) -> dict[str, float]:
+    total = sum(max(v, 0.0) for v in score.values())
+    if total <= 0:
+        n = float(len(score) or 1)
+        return {k: 1.0 / n for k in score}
+    return {k: max(v, 0.0) / total for k, v in score.items()}
+
+
+def detect_intent_with_confidence(user_text: str) -> tuple[str, dict[str, float], list[str], bool]:
+    """Return winner intent + normalized scores + top2 + ambiguity flag."""
+    text_lower = user_text.lower().strip()
+    tokens = re.findall(r"[a-z0-9]+", text_lower)
+
+    score: dict[str, float] = {
+        INTENT_CALCULATE: 0.0,
+        INTENT_QA: 0.0,
+        INTENT_MATCH: 0.0,
+        INTENT_VISUALIZE: 0.0,
+        INTENT_GENERAL: 0.0,
+    }
+
+    # Strong unambiguous calculate signals (explicit calculation request)
+    calculate_strong_keywords = [
+        "score breakdown", "comprehensive ranking",
+        "calculate", "calculator", "how many points",
+    ]
+    for kw in calculate_strong_keywords:
+        if kw in text_lower:
+            score[INTENT_CALCULATE] += 3.0
+    if _fuzzy_contains(tokens, ["calculate", "calculator"]):
+        score[INTENT_CALCULATE] += 3.0
+
+    # Weak calculate signals — only decisive when combined with personal context
+    calculate_mild_keywords = ["points"]  # 'crs'/'crs score' are domain words, not calculation signals
+    for kw in calculate_mild_keywords:
+        if kw in text_lower:
+            score[INTENT_CALCULATE] += 0.8
+    if _fuzzy_contains(tokens, ["score", "points"]):  # exclude 'crs' — not a calc signal alone
+        score[INTENT_CALCULATE] += 0.5
+
+    # Personal-context amplifier: boosts calculate when user refers to their own profile
+    personal_calculate_patterns = [
+        r"\bmy\s+(?:crs|score|points)\b",
+        r"\b(?:crs|score|points)\b.*\bmy\b",
+        r"\bwhat\s+(?:is|would\s+be|will\s+be|are)\s+my\b",
+        r"\b(?:i\s+am|i\s+have|i'm|i've|i\s+hold)\b",
+        r"\bwith\s+(?:my|a)\s+(?:age|degree|master|bachelor|diploma|experience|ielts|clb)\b",
+    ]
+    for pat in personal_calculate_patterns:
+        if re.search(pat, text_lower):
+            score[INTENT_CALCULATE] += 3.0
+
+    qa_keywords = [
+        "document", "documents", "checklist", "what do i need",
+        "what to submit", "required documents", "supporting documents",
+        "proof of", "evidence of", "requirement", "minimum", "maximum",
+        "require", "required",  # factual yes/no questions: "does X require Y?"
+    ]
+    for kw in qa_keywords:
+        if kw in text_lower:
+            score[INTENT_QA] += 2.5
+    if _fuzzy_contains(tokens, ["document", "checklist", "requirement"]):
+        score[INTENT_QA] += 1.2
+
+    match_patterns = [
+        r"\beligib",
+        r"\bqualif",
+        r"\bcan i (apply|get|receive)\b",
+        r"\bdo i (meet|qualify|have enough)\b",
+        r"\bam i (eligible|able to)\b",
+        r"\bwould i (qualify|be eligible)\b",
+        r"\bmy (eligibility|application|profile)\b",
+    ]
+    for pattern in match_patterns:
+        if re.search(pattern, user_text, re.IGNORECASE):
+            score[INTENT_MATCH] += 3.0
+
+    visualize_keywords = [
+        "pathway", "pathways", "options", "routes", "ways to get pr",
+        "how to get pr", "what programs", "which programs", "overview",
+        "what streams", "which streams", "compare",
+    ]
+    for kw in visualize_keywords:
+        if kw in text_lower:
+            score[INTENT_VISUALIZE] += 2.8
+    if _fuzzy_contains(tokens, ["pathway", "programs", "options"]):
+        score[INTENT_VISUALIZE] += 1.0
+
+    general_keywords = [
+        "latest immigration policy", "latest policy", "policy update",
+        "policy changes", "new rules", "recent changes", "latest immigration news",
+    ]
+    for kw in general_keywords:
+        if kw in text_lower:
+            score[INTENT_GENERAL] += 3.2
+    if _fuzzy_contains(tokens, ["latest", "recent", "policy", "update", "changes"]):
+        score[INTENT_GENERAL] += 1.0
+
+    norm = _normalize_intent_scores(score)
+    ranked = sorted(norm.items(), key=lambda x: x[1], reverse=True)
+    winner = ranked[0][0]
+    top2 = [item[0] for item in ranked[:2]]
+    # Ambiguous when top-2 are close and winner confidence is modest.
+    ambiguous = len(ranked) > 1 and (ranked[0][1] - ranked[1][1] <= 0.36) and ranked[0][1] < 0.75
+    return winner, norm, top2, ambiguous
+
+
+def build_intent_clarification(top2: list[str]) -> str:
+    """Return a compact disambiguation question for ambiguous intent."""
+    labels = {
+        INTENT_VISUALIZE: "pathway overview",
+        INTENT_MATCH: "eligibility check",
+        INTENT_CALCULATE: "CRS score calculation",
+        INTENT_QA: "document/factual Q&A",
+        INTENT_GENERAL: "latest policy update",
+    }
+    if len(top2) >= 2:
+        a, b = labels.get(top2[0], top2[0]), labels.get(top2[1], top2[1])
+        return (
+            "I can help, but your request could mean two different tasks. "
+            f"Do you want a {a} or a {b}?"
+        )
+    return "I can help. Could you clarify whether you want eligibility checking, calculation, or a policy overview?"
+
+
 # ===========================================================================
 # PUBLIC FUNCTION 1 — detect_intent()   [NEW]
 # ===========================================================================
@@ -191,11 +354,12 @@ _L3_PATTERNS: list[re.Pattern] = [
 def detect_intent(user_text: str) -> str:
     """Identify user intent and return the corresponding intent string.
 
-    Returns one of four intent labels that map directly to the 4 product Actions:
+        Returns one of five intent labels:
       "visualize"  → Action 1: pathway overview / visualisation
       "match"      → Action 2: eligibility matching
       "calculate"  → Action 3: CRS score calculation
       "qa"         → Action 4: document checklist / factual Q&A
+            "general"    → Action 4: broad policy updates / general informational query
 
     This function is called internally by build_answer() to select the
     correct response format template.
@@ -204,7 +368,7 @@ def detect_intent(user_text: str) -> str:
         user_text: Raw user message.
 
     Returns:
-        Intent string: "visualize" | "match" | "calculate" | "qa"
+        Intent string: "visualize" | "match" | "calculate" | "qa" | "general"
 
     Examples:
         >>> detect_intent("What is my CRS score?")
@@ -219,58 +383,8 @@ def detect_intent(user_text: str) -> str:
         >>> detect_intent("What PR pathways exist for me?")
         'visualize'
     """
-    text_lower = user_text.lower()
-
-    # ── calculate: CRS / score ───────────────────────────────────────────────
-    calculate_keywords = [
-        "crs", "crs score", "comprehensive ranking", "my score",
-        "calculate", "calculator", "how many points", "points breakdown",
-        "score breakdown", "what is my score",
-    ]
-    for kw in calculate_keywords:
-        if kw in text_lower:
-            return INTENT_CALCULATE
-
-    # ── visualize: pathway overview (check BEFORE match to avoid "my profile"
-    #    regex stealing pathway queries like "What pathways exist for my profile?")
-    visualize_keywords = [
-        "pathway", "pathways", "options", "routes", "ways to get pr",
-        "how to get pr", "what programs", "which programs", "overview",
-        "what streams", "which streams", "what can i apply",
-        "show me", "list", "compare",
-    ]
-    for kw in visualize_keywords:
-        if kw in text_lower:
-            return INTENT_VISUALIZE
-
-    # ── qa: document checklist / factual Q&A ────────────────────────────────
-    qa_keywords = [
-        "document", "documents", "checklist", "what do i need",
-        "what papers", "what files", "what to submit", "required documents",
-        "supporting documents", "proof of", "evidence of",
-        "what is", "how does", "when is", "where is",
-        "minimum", "maximum", "requirement for", "definition of",
-    ]
-    for kw in qa_keywords:
-        if kw in text_lower:
-            return INTENT_QA
-
-    # ── match: eligibility check ─────────────────────────────────────────────
-    match_patterns = [
-        r"\beligib",
-        r"\bqualif",
-        r"\bcan i (apply|get|receive)\b",
-        r"\bdo i (meet|qualify|have enough)\b",
-        r"\bam i (eligible|able to)\b",
-        r"\bwould i (qualify|be eligible)\b",
-        r"\bmy (eligibility|application|profile)\b",
-    ]
-    for pattern in match_patterns:
-        if re.search(pattern, user_text, re.IGNORECASE):
-            return INTENT_MATCH
-
-    # Default: eligibility match
-    return INTENT_MATCH
+    winner, _, _, _ = detect_intent_with_confidence(user_text)
+    return winner
 
 
 # ===========================================================================
@@ -311,33 +425,82 @@ def route_risk(
         RiskLevel: L1 | L2 | L3
     """
     # ── 1. L3 safety gate ────────────────────────────────────────────────────
-    if user_text:
-        for pattern in _L3_PATTERNS:
-            if pattern.search(user_text):
-                return RiskLevel.L3
+    level, _ = route_risk_with_explain(profile, results, user_text=user_text)
+    return level
 
-    # ── 2. Profile completeness gate ─────────────────────────────────────────
-    completeness = assess_completeness(profile)
-    if completeness.mode == IntakeMode.DATA_COLLECTION:
-        # Cannot do eligibility matching; treat as general info
-        return RiskLevel.L1
 
-    # ── 3. Intent-based classification ───────────────────────────────────────
+def route_risk_with_explain(
+    profile: IntakeProfile,
+    results: list[RetrievalResult],
+    user_text: str = "",
+) -> tuple[RiskLevel, dict[str, Any]]:
+    """Risk routing with explicit decision trace for debugging/observability."""
+    explain: dict[str, Any] = {
+        "input": {
+            "query": user_text,
+            "results_count": len(results),
+        },
+        "steps": [],
+        "decision": None,
+    }
+
+    if is_l3_query(user_text):
+        explain["steps"].append({"gate": "l3_pattern", "matched": True})
+        explain["decision"] = "L3"
+        return RiskLevel.L3, explain
+    explain["steps"].append({"gate": "l3_pattern", "matched": False})
+
+    # ── 2. Intent-based baseline ─────────────────────────────────────────────
     if user_text:
-        intent = detect_intent(user_text)
+        intent, intent_scores, top2, ambiguous = detect_intent_with_confidence(user_text)
     else:
-        intent = INTENT_MATCH  # default when no text provided
+        intent, intent_scores, top2, ambiguous = INTENT_GENERAL, {INTENT_GENERAL: 1.0}, [INTENT_GENERAL], False
+    explain["steps"].append(
+        {
+            "gate": "intent_baseline",
+            "intent": intent,
+            "intent_scores": intent_scores,
+            "intent_top2": top2,
+            "ambiguous": ambiguous,
+        }
+    )
 
-    if intent in (INTENT_CALCULATE, INTENT_QA):
+    if intent in (INTENT_CALCULATE, INTENT_QA, INTENT_GENERAL):
         base_level = RiskLevel.L1
     else:
-        base_level = RiskLevel.L2  # match or visualize
+        base_level = RiskLevel.L2  # match / visualize
+
+    # ── 3. Completeness gate (only for personalised matching-like intents) ─
+    completeness = assess_completeness(profile)
+    if base_level == RiskLevel.L2 and completeness.mode == IntakeMode.DATA_COLLECTION:
+        # Cannot do eligibility matching; treat as general info
+        explain["steps"].append(
+            {
+                "gate": "completeness",
+                "mode": completeness.mode,
+                "missing_required": completeness.missing_required,
+                "downgrade": "L2->L1",
+            }
+        )
+        explain["decision"] = "L1"
+        return RiskLevel.L1, explain
+    explain["steps"].append(
+        {
+            "gate": "completeness",
+            "mode": completeness.mode,
+            "missing_required": completeness.missing_required,
+        }
+    )
 
     # ── 4. No-evidence escalation ────────────────────────────────────────────
     if base_level == RiskLevel.L2 and not results:
-        return RiskLevel.L3
+        explain["steps"].append({"gate": "no_evidence_escalation", "triggered": True, "from": "L2", "to": "L3"})
+        explain["decision"] = "L3"
+        return RiskLevel.L3, explain
 
-    return base_level
+    explain["steps"].append({"gate": "no_evidence_escalation", "triggered": False})
+    explain["decision"] = str(base_level)
+    return base_level, explain
 
 
 # ===========================================================================
@@ -352,6 +515,10 @@ def build_answer(
     retry_count: int = 0,
     user_text: str = "",
     action_type: Optional[ActionType] = None,
+    risk_explain: dict[str, Any] | None = None,
+    intent_scores: dict[str, float] | None = None,
+    intent_top2: list[str] | None = None,
+    intent_ambiguous: bool = False,
 ) -> FinalAnswer:
     """Construct LLM prompt, call LLM, parse and return FinalAnswer.
 
@@ -408,6 +575,10 @@ def build_answer(
             citations=[],
             no_evidence_action=NoEvidenceAction.REFUSE,
             retry_count=retry_count,
+            risk_explain=risk_explain,
+            intent_scores=intent_scores,
+            intent_top2=intent_top2,
+            intent_ambiguous=intent_ambiguous,
         )
 
     # ── Step 3: No evidence → tier-specific fallback ─────────────────────────
@@ -420,6 +591,10 @@ def build_answer(
                 citations=[],
                 no_evidence_action=NoEvidenceAction.CITE_GAP,
                 retry_count=retry_count,
+                risk_explain=risk_explain,
+                intent_scores=intent_scores,
+                intent_top2=intent_top2,
+                intent_ambiguous=intent_ambiguous,
             )
         else:  # L2 with no evidence
             return FinalAnswer(
@@ -429,6 +604,10 @@ def build_answer(
                 citations=[],
                 no_evidence_action=NoEvidenceAction.PARTIAL_ANSWER,
                 retry_count=retry_count,
+                risk_explain=risk_explain,
+                intent_scores=intent_scores,
+                intent_top2=intent_top2,
+                intent_ambiguous=intent_ambiguous,
             )
 
     # ── Step 4: Evidence available → build LLM prompt ────────────────────────
@@ -438,8 +617,16 @@ def build_answer(
     evidence_block = _format_evidence_block(results, tool_results)
     profile_block  = profile_to_context(profile)
 
-    # Select format instructions based on detected intent
-    format_instructions = _ACTION_FORMAT.get(intent, _ACTION_FORMAT[INTENT_MATCH])
+    # Select format instructions based on detected intent.
+    # For INTENT_QA, sub-select between factual Q&A and document checklist.
+    if intent == INTENT_QA:
+        _doc_keywords = ["document", "documents", "checklist", "what do i need",
+                         "what to submit", "required documents", "supporting documents",
+                         "proof of", "evidence of"]
+        _is_doc_qa = any(kw in user_text.lower() for kw in _doc_keywords)
+        format_instructions = _ACTION_FORMAT["qa_document" if _is_doc_qa else INTENT_QA]
+    else:
+        format_instructions = _ACTION_FORMAT.get(intent, _ACTION_FORMAT[INTENT_MATCH])
 
     user_turn = (
         f"USER QUERY:\n{user_text}\n\n"
@@ -455,7 +642,7 @@ def build_answer(
 
     # ── Step 5: Call LLM (or stub if unavailable) ────────────────────────────
     if _llm_configured():
-        answer_text = _call_llm(user_turn, intent=intent)
+        answer_text = _call_llm(user_turn, intent=intent, format_override=format_instructions)
     else:
         answer_text = _stub_answer(results, tool_results, intent)
 
@@ -470,6 +657,10 @@ def build_answer(
         no_evidence_action=None,
         retry_count=retry_count,
         confidence_warning=confidence_warning,
+        risk_explain=risk_explain,
+        intent_scores=intent_scores,
+        intent_top2=intent_top2,
+        intent_ambiguous=intent_ambiguous,
     )
 
 
@@ -526,10 +717,11 @@ _INTENT_ACTION_NAME: dict[str, str] = {
     INTENT_MATCH:      "ACTION 2 — Eligibility Check",
     INTENT_CALCULATE:  "ACTION 3 — CRS Score Calculation",
     INTENT_QA:         "ACTION 4 — Document Checklist / Factual Q&A",
+    INTENT_GENERAL:    "ACTION 4 — General Policy Brief",
 }
 
 
-def _call_llm(user_turn: str, intent: str = INTENT_MATCH) -> str:
+def _call_llm(user_turn: str, intent: str = INTENT_MATCH, format_override: str | None = None) -> str:
     """Call the project-standard LLM client (D-010 settings from .env).
 
     Injects an action-specific FORMAT OVERRIDE block at the top of the
@@ -538,9 +730,13 @@ def _call_llm(user_turn: str, intent: str = INTENT_MATCH) -> str:
 
     max_tokens is set to 2048 to give qwen3 reasoning mode enough budget
     to both think and produce a full differentiated response.
+
+    Args:
+        format_override: When provided, use this format string instead of the
+            default _ACTION_FORMAT lookup (used for QA sub-type selection).
     """
     action_name = _INTENT_ACTION_NAME.get(intent, "ACTION 2 — Eligibility Check")
-    format_instructions = _ACTION_FORMAT.get(intent, _ACTION_FORMAT[INTENT_MATCH])
+    format_instructions = format_override if format_override is not None else _ACTION_FORMAT.get(intent, _ACTION_FORMAT[INTENT_MATCH])
 
     action_override = (
         f"=== ACTIVE ACTION FOR THIS TURN: {action_name} ===\n"
