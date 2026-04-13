@@ -259,7 +259,7 @@ def ingest(source_url: str, source_meta: dict[str, Any] | None = None) -> int:
     PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     existing_ids: set[str] = set()
     if PROCESSED_CHUNKS_FILE.exists():
-        with open(PROCESSED_CHUNKS_FILE) as f:
+        with open(PROCESSED_CHUNKS_FILE, encoding="utf-8", errors="ignore") as f:
             for line in f:
                 line = line.strip()
                 if not line:
@@ -271,7 +271,7 @@ def ingest(source_url: str, source_meta: dict[str, Any] | None = None) -> int:
                     continue
 
     written = 0
-    with open(PROCESSED_CHUNKS_FILE, "a") as f:
+    with open(PROCESSED_CHUNKS_FILE, "a", encoding="utf-8", errors="ignore") as f:
         for rec in records:
             if rec["chunk_id"] in existing_ids:
                 continue
@@ -291,7 +291,7 @@ def ingest_all(priority_filter: str | None = "P0") -> int:
         print(f"[ingestion] ERROR: registry not found at {URL_REGISTRY_FILE}")
         return 0
 
-    with open(URL_REGISTRY_FILE) as f:
+    with open(URL_REGISTRY_FILE, encoding="utf-8", errors="ignore") as f:
         registry = json.load(f)
 
     total = 0

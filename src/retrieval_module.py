@@ -158,7 +158,7 @@ def _load_chunks() -> list[dict]:
     if not PROCESSED_CHUNKS_FILE.exists():
         return []
     rows = []
-    with open(PROCESSED_CHUNKS_FILE) as f:
+    with open(PROCESSED_CHUNKS_FILE, encoding="utf-8", errors="ignore") as f:
         for line in f:
             stripped = line.strip()
             if not stripped:
