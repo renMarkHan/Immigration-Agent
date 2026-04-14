@@ -30,10 +30,15 @@ def run_pipeline(profile: IntakeProfile, conv_history: list[dict] | None = None)
     can refer back to earlier exchanges (same as Claude/ChatGPT behaviour).
     """
     # Step 0: Enrich profile from free-text query for downstream routing/tools.
+    # In web chat flow, intake already extracted and merged fields earlier in
+    # the request lifecycle. Re-running extraction here duplicates an extra LLM
+    # call and can noticeably increase latency for Action 3/4.
+    # Keep extraction for non-chat paths (no conv_history) for compatibility.
     working_profile = profile.model_copy(deep=True)
-    extracted = extract_fields(profile.query)
-    if extracted:
-        update_profile(working_profile, extracted)
+    if conv_history is None:
+        extracted = extract_fields(profile.query)
+        if extracted:
+            update_profile(working_profile, extracted)
 
     # Step 1: Detect intent early and short-circuit L3 safety requests.
     intent, intent_scores, intent_top2, intent_ambiguous = agent_module.detect_intent_with_confidence(

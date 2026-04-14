@@ -1674,15 +1674,20 @@ async function sendMessage() {
   setWaiting(true);
 
   try {
+    const controller = new AbortController();
+    const requestTimeoutMs = 60000;
+    const timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs);
     const res  = await fetch('/api/chat', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
       body:    JSON.stringify({
         session_id: sessionId,
         message: text,
         profile_overrides: readProfileFromForm(),
       }),
     });
+    clearTimeout(timeoutId);
     const data = await res.json();
 
     hideTyping();
@@ -1704,7 +1709,11 @@ async function sendMessage() {
 
   } catch (err) {
     hideTyping();
-    appendError('Network error — please try again.');
+    if (err && err.name === 'AbortError') {
+      appendError('Request timed out after 60s. Please try again, simplify the question, or retry in a moment.');
+    } else {
+      appendError('Network error — please try again.');
+    }
   }
 
   setWaiting(false);

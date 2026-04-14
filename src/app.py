@@ -116,6 +116,44 @@ _store = SessionStore()
 # Helpers
 # ---------------------------------------------------------------------------
 
+def _build_collecting_message_from_profile(profile) -> str:
+    """Build a collecting prompt from the latest profile snapshot.
+
+    UX goals:
+    - Never ask for fields that are already filled in the sidebar form.
+    - Explicitly tell users the minimum threshold (6/8 required fields)
+      before eligibility matching can begin.
+    """
+    from src.intake import REQUIRED_FIELDS, _FIELD_META
+
+    d = profile.model_dump()
+    missing = [f for f in REQUIRED_FIELDS if d.get(f) is None]
+    filled_count = len(REQUIRED_FIELDS) - len(missing)
+
+    # Ask up to two next missing fields, matching intake.py behavior.
+    prompts: list[str] = []
+    for i, field in enumerate(missing[:2], 1):
+        prompt = _FIELD_META.get(field, {}).get(
+            "prompt",
+            f"Please provide your {field.replace('_', ' ')}.",
+        )
+        prompts.append(f"{i}. {prompt}")
+
+    lines = [
+        "I have recorded the profile details you already filled.",
+        (
+            "To start eligibility assessment, please complete at least "
+            "6 of 8 required fields "
+            f"(currently {filled_count}/8)."
+        ),
+    ]
+    if prompts:
+        lines.append("")
+        lines.append("Please add these next:")
+        lines.extend(prompts)
+
+    return "\n".join(lines)
+
 def _profile_summary(profile) -> dict:
     """Return a display-friendly dict of collected profile fields."""
     from src.intake import REQUIRED_FIELDS, OPTIONAL_FIELDS, _FIELD_META
@@ -242,6 +280,10 @@ def chat():
             if not turn.ready_for_retrieval:
                 turn.ready_for_retrieval = True
                 turn.agent_message = ""
+        elif completeness.mode == IntakeMode.DATA_COLLECTION and not turn.ready_for_retrieval:
+            # Rebuild collecting prompt from updated profile so we don't ask for
+            # already-filled fields and we clearly show the 6/8 threshold.
+            turn.agent_message = _build_collecting_message_from_profile(session.profile)
 
     # Bypass profile-collection gate for factual / general / L3 queries.
     # These don't need personal profile fields — answer immediately without

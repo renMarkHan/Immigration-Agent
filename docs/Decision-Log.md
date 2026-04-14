@@ -39,6 +39,15 @@ Purpose: Persistent record of planning and execution decisions for auditability 
 - Impact: Intake flow, confidence labels, eligibility matching.
 - Verification: 100% of test conversations enforce missing-field rules.
 
+Update (Execution):
+- Update Date: 2026-04-13
+- Change Summary: In `src/app.py`, when sidebar `profile_overrides` are applied after `process_turn()`, the collecting prompt is now rebuilt from the updated profile. This prevents re-asking already-filled fields (for example age) and adds an explicit progress message that eligibility matching starts at 6/8 required fields.
+- Why Changed: Users were confused when they had already filled profile fields in the sidebar but still saw repeated intake prompts generated from stale pre-override state.
+- Expected Impact: Fewer repeated intake questions, clearer guidance on minimum profile completion, and reduced friction in Action 2 eligibility checks.
+- Measured Result: `python test_completeness.py` remains green; collecting prompts now reflect post-override missing fields and include current progress (e.g., 4/8).
+- Follow-up Actions: Add an end-to-end API test that posts `/api/chat` with partial/complete `profile_overrides` and asserts the collecting prompt never asks filled fields.
+- Owner: Ehraaz Atif (Integration/UX)
+
 ### D-003 No-Evidence Handling Flow (Frozen)
 - Date: 2026-04-07
 - Owner: Team (Agent + Policy)
@@ -90,28 +99,22 @@ Update (Execution):
 - Owner: Ehraaz Atif (Integration/UX)
 
 ### D-004 Retrieval Architecture Baseline (Frozen)
-- Date: 2026-04-07
-- Owner: Team (Data/Retrieval)
-- Status: Frozen
-- Decision: Hybrid retrieval + reranker + metadata filtering.
-- Baseline Parameters:
   - BM25 weight: 0.6
   - Vector weight: 0.4
   - Initial retrieve top-k: 20
   - Rerank keep top-k: 5
   - Metadata filters: province/program/stream/effective_date/source_type
-- Rationale: Policy text benefits from keyword precision plus semantic recall.
-- Impact: Retrieval service defaults and eval baselines.
-- Verification: Factual + citation metrics improve over pure-vector baseline.
 
 Update (Execution):
-- Update Date: 2026-04-07
-- Change Summary: Added a demonstrative Ontario flow implementation (ingest local chunk -> retrieve requirement section -> return citation-grounded answer).
-- Why Changed: Needed a concrete handoff example so ingestion/retrieval owners can implement against an explicit process target.
-- Expected Impact: Faster module onboarding and fewer interpretation gaps about retrieval behavior.
-- Measured Result: Demo script path added (`python -m src.demo_ontario_flow`) with deterministic retrieval hit for OINP Masters requirement query.
-- Follow-up Actions: Replace demo chunk generation with real crawling/cleaning/chunking/indexing and BM25+vector hybrid retrieval.
-- Owner: Yuhan Ren (Framework), Retrieval/Ingestion owners for production replacement
+
+Update (Execution):
+- Update Date: 2026-04-13
+- Change Summary: Reduced Action 3/4 latency and hang risk by (1) adding LLM request timeout + fail-fast fallback in `src/llm_client.py`, (2) skipping duplicate field-extraction pass in `src/orchestrator.py` for web chat flow, and (3) adding a 60s frontend request timeout with explicit timeout error in `web/index.html`.
+- Why Changed: Users reported Action 3/4 requests staying in loading state for too long with no feedback.
+- Expected Impact: Faster median response for Action 3/4 and no indefinite loading when upstream LLM/network stalls.
+- Measured Result: Python compile checks pass; UI now surfaces timeout errors instead of spinner lock.
+- Follow-up Actions: Add lightweight latency telemetry (start/end timestamps per `/api/chat`) and a regression test for timeout-path UX.
+- Owner: Ehraaz Atif (Integration/UX)
 
 Update (Execution):
 - Update Date: 2026-04-10
