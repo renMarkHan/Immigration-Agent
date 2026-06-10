@@ -60,7 +60,15 @@ def generate(
         choice = response.choices[0]
         # content may be None if all tokens were consumed by reasoning
         return choice.message.content or ""
-    except Exception:
+    except Exception as exc:
         # Fail fast so callers can fall back to rule/stub paths instead of
-        # keeping the UI in a long loading state.
+        # keeping the UI in a long loading state. Log so connectivity issues
+        # (e.g. an unreachable endpoint or timeout) are visible instead of a
+        # silent blank response.
+        import sys
+
+        print(
+            f"[llm_client] LLM call failed: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
         return ""

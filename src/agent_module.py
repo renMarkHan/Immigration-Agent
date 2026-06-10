@@ -732,6 +732,16 @@ def build_answer(
             format_override=format_instructions,
             conv_history=conv_history,
         )
+        if not answer_text.strip():
+            # The endpoint is configured but returned nothing (e.g. unreachable
+            # or timed out). Surface a clear message instead of a blank bubble,
+            # and still give the user the evidence-based fallback answer.
+            answer_text = (
+                "⚠️ The AI service did not return a response — the LLM endpoint "
+                "may be unreachable or the request timed out. Please verify "
+                "LLM_ENDPOINT / LLM_API_KEY in your .env and try again.\n\n"
+                + _stub_answer(results, tool_results, intent)
+            )
     else:
         answer_text = _stub_answer(results, tool_results, intent)
 

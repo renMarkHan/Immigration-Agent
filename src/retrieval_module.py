@@ -235,10 +235,35 @@ def _ensure_chroma_index(rows: list[dict]) -> Collection:
     global _CHROMA_INDEXED_COUNT
     target_count = len(rows)
 
+    # On the first query in a fresh process, reuse the already-persisted index
+    # when its size matches the corpus instead of re-embedding every chunk.
+    # Without this, each server restart re-embeds the full corpus (~30s) on the
+    # first request, which can push a single turn past the frontend timeout.
+    if _CHROMA_INDEXED_COUNT == -1:
+        try:
+            persisted = collection.count()
+        except Exception:
+            persisted = 0
+        if target_count > 0 and persisted == target_count:
+            _CHROMA_INDEXED_COUNT = target_count
+            return collection
+
     # Rebuild when corpus size changed or first use.
     if _CHROMA_INDEXED_COUNT != target_count:
         return _rebuild_chroma_index(rows)
     return collection
+
+
+def build_index() -> int:
+    """(Re)build the persistent Chroma vector index from the processed chunks.
+
+    Public entry point used by the ingestion / draw-data scripts and the
+    ``python -m src.retrieval_module --build`` CLI. Returns the number of
+    chunks indexed.
+    """
+    rows = _load_chunks()
+    _rebuild_chroma_index(rows)
+    return len(rows)
 
 
 def _vector_rank(query: str, candidate_rows: list[dict], top_k: int) -> dict[str, float]:
@@ -397,3 +422,20 @@ def retrieve(request: RetrievalRequest) -> list[RetrievalResult]:
             )
         )
     return results
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Retrieval index utilities.")
+    parser.add_argument(
+        "--build",
+        action="store_true",
+        help="(Re)build the Chroma vector index from processed chunks.",
+    )
+    args = parser.parse_args()
+    if args.build:
+        n = build_index()
+        print(f"[retrieval] Index built — {n} chunks indexed.")
+    else:
+        parser.print_help()
