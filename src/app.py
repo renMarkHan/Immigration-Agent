@@ -17,11 +17,12 @@ Run:
 
 from __future__ import annotations
 
+import json
 import uuid
 from pathlib import Path
 
 from dotenv import load_dotenv
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, Response, jsonify, request, send_from_directory, stream_with_context
 
 load_dotenv()
 
@@ -32,6 +33,27 @@ load_dotenv()
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 
 app = Flask(__name__, static_folder=str(WEB_DIR), static_url_path="")
+
+
+def _prewarm_retrieval_index() -> None:
+    """Pre-load the ChromaDB vector index on startup so the first user request
+    does not incur a 2-5 minute cold-start embedding delay."""
+    import threading
+
+    def _load():
+        try:
+            from src import retrieval_module
+            retrieval_module.retrieve(
+                __import__("src.schemas", fromlist=["RetrievalRequest"]).RetrievalRequest(
+                    query="express entry eligibility"
+                )
+            )
+            print("[prewarm] Retrieval index ready.")
+        except Exception as exc:
+            print(f"[prewarm] Warning: could not pre-load index: {exc}")
+
+    t = threading.Thread(target=_load, daemon=True)
+    t.start()
 
 
 # ---------------------------------------------------------------------------
@@ -167,11 +189,16 @@ def _profile_summary(profile) -> dict:
             "value": d.get(f),
             "filled": d.get(f) is not None,
         })
-    optional = []
+
+    optional: list[dict] = []
     for f in OPTIONAL_FIELDS:
         val = d.get(f)
         if val is not None:
-            optional.append({"field": f, "label": f.replace("_", " ").title(), "value": val})
+            optional.append({
+                "field": f,
+                "label": f.replace("_", " ").title(),
+                "value": val,
+            })
 
     return {"required": required, "optional": optional}
 
@@ -290,14 +317,14 @@ def chat():
     # asking for age, education, etc.
     if not turn.ready_for_retrieval:
         from src.agent_module import (
-            detect_intent_with_confidence,
+            detect_intent,   # keyword-only, no LLM — safe to call synchronously
             is_l3_query,
             INTENT_QA,
             INTENT_GENERAL,
             INTENT_CALCULATE,
         )
         _orig = data["original_query"] or message
-        _intent, _, _, _ = detect_intent_with_confidence(_orig)
+        _intent = detect_intent(_orig)   # fast keyword check, no LLM call
         if _intent in (INTENT_QA, INTENT_GENERAL, INTENT_CALCULATE) or is_l3_query(_orig):
             turn.ready_for_retrieval = True
             turn.agent_message = ""  # suppress the profile-collection prompt
@@ -379,6 +406,219 @@ def chat():
     return jsonify(base)
 
 
+@app.route("/api/chat/stream", methods=["POST"])
+def chat_stream():
+    """Streaming variant of /api/chat using Server-Sent Events.
+
+    SSE event types emitted:
+      {"type":"status",  "message":"..."}        — progress label
+      {"type":"token",   "content":"..."}        — LLM token chunk
+      {"type":"done",    "answer":"...",          — full metadata on finish
+                         "citations":[...], ...}
+      {"type":"error",   "message":"..."}        — on failure
+    """
+    body = request.get_json(force=True) or {}
+    session_id = body.get("session_id", "")
+    message = body.get("message", "").strip()
+
+    if not _store.exists(session_id):
+        def _err():
+            yield f"data: {json.dumps({'type':'error','message':'Session not found. Please refresh.'})}\n\n"
+        return Response(stream_with_context(_err()), mimetype="text/event-stream")
+
+    if not message:
+        def _err2():
+            yield f"data: {json.dumps({'type':'error','message':'Empty message.'})}\n\n"
+        return Response(stream_with_context(_err2()), mimetype="text/event-stream")
+
+    try:
+        data = _store.get(session_id)
+        machine = data["machine"]
+        session = data["session"]
+    except Exception as _exc:
+        def _setup_err(_m=str(_exc)):
+            yield f"data: {json.dumps({'type':'error','message':f'Session error: {_m}'})}\n\n"
+        return Response(stream_with_context(_setup_err()), mimetype="text/event-stream")
+
+    if data["original_query"] is None:
+        data["original_query"] = message
+
+    was_ready_before = session.state.value in (
+        "ready_to_match", "matching_done", "low_confidence_match"
+    )
+    profile_before = session.profile.model_dump()
+    try:
+        turn = machine.process_turn(session, message)
+    except Exception as _exc:
+        def _turn_err(_m=str(_exc)):
+            yield f"data: {json.dumps({'type':'error','message':f'Processing error: {_m}'})}\n\n"
+        return Response(stream_with_context(_turn_err()), mimetype="text/event-stream")
+    profile_after = session.profile.model_dump()
+    extracted_fields = {
+        k: v for k, v in profile_after.items()
+        if v is not None and v != profile_before.get(k)
+    }
+
+    profile_overrides = {k: v for k, v in (body.get("profile_overrides") or {}).items()
+                         if v is not None and v != ""}
+    if profile_overrides:
+        from src.schemas import IntakeProfile as _IP
+        d = session.profile.model_dump()
+        d.update(profile_overrides)
+        session.profile = _IP(**d)
+        from src.intake import assess_completeness, IntakeMode, ConversationState
+        completeness = assess_completeness(session.profile)
+        if completeness.mode in (IntakeMode.FULL_MATCHING, IntakeMode.LOW_CONFIDENCE):
+            if session.state.value not in ("ready_to_match", "matching_done", "low_confidence_match"):
+                session.state = ConversationState.READY_TO_MATCH
+            if not turn.ready_for_retrieval:
+                turn.ready_for_retrieval = True
+                turn.agent_message = ""
+        elif completeness.mode == IntakeMode.DATA_COLLECTION and not turn.ready_for_retrieval:
+            turn.agent_message = _build_collecting_message_from_profile(session.profile)
+
+    if not turn.ready_for_retrieval:
+        from src.agent_module import detect_intent, is_l3_query, INTENT_QA, INTENT_GENERAL, INTENT_CALCULATE
+        _orig = data["original_query"] or message
+        _intent = detect_intent(_orig)   # keyword-only, no LLM
+        if _intent in (INTENT_QA, INTENT_GENERAL, INTENT_CALCULATE) or is_l3_query(_orig):
+            turn.ready_for_retrieval = True
+            turn.agent_message = ""
+
+    base_meta = {
+        "session_id": session_id,
+        "state": session.state.value,
+        "profile": _profile_summary(session.profile),
+        "ready_for_retrieval": turn.ready_for_retrieval,
+        "action_route": turn.action_route.value if turn.action_route else None,
+        "extracted_fields": extracted_fields,
+    }
+
+    if not turn.ready_for_retrieval:
+        def _collecting():
+            yield f"data: {json.dumps({'type':'collecting','agent_message':turn.agent_message,**base_meta})}\n\n"
+        return Response(stream_with_context(_collecting()), mimetype="text/event-stream")
+
+    # Determine pipeline query
+    if was_ready_before:
+        msg_lower = message.lower()
+        is_new_question = (
+            '?' in message
+            or any(msg_lower.startswith(w) for w in [
+                'what','how','which','why','when','where','who',
+                'am i','can i','do i','will i','would i','is there',
+                'are there','tell me','show me','explain',
+            ])
+            or any(kw in msg_lower for kw in [
+                'eligible','qualify','pathway','document','calculate',
+                'crs','score','option','program','stream','apply',
+            ])
+        )
+        if is_new_question:
+            data["current_question"] = message
+        pipeline_query = data.get("current_question") or data["original_query"] or message
+    else:
+        pipeline_query = data["original_query"] or message
+        data["current_question"] = pipeline_query
+    session.profile.query = pipeline_query
+
+    conv_history: list[dict] = data.setdefault("conv_history", [])
+    conv_history.append({"role": "user", "content": pipeline_query})
+
+    def _generate():
+        from src import agent_module, policy_tool_module, retrieval_module
+        from src.schemas import RetrievalRequest, ToolRequest
+        from src.llm_client import generate_stream
+
+        try:
+            yield f"data: {json.dumps({'type':'status','message':'Searching policy documents…'})}\n\n"
+
+            # Step 1: intent + L3 check
+            intent, intent_scores, intent_top2, intent_ambiguous = \
+                agent_module.detect_intent_with_confidence(pipeline_query)
+
+            if agent_module.is_l3_query(pipeline_query):
+                refusal = agent_module.get_l3_refusal()
+                conv_history.append({"role": "assistant", "content": refusal})
+                yield f"data: {json.dumps({'type':'done','answer':refusal,'citations':[],'risk_level':'L3','action_type':None,'confidence_warning':'','retry_count':0,**base_meta})}\n\n"
+                return
+
+            # Step 2: retrieval
+            if intent in (agent_module.INTENT_MATCH, agent_module.INTENT_VISUALIZE):
+                rr = RetrievalRequest(
+                    query=pipeline_query,
+                    province=session.profile.province,
+                    program=session.profile.program,
+                    stream=session.profile.stream,
+                )
+            else:
+                rr = RetrievalRequest(query=pipeline_query)
+            results = retrieval_module.retrieve(rr)
+
+            # Step 3: policy tools
+            tool_results = []
+            if intent == agent_module.INTENT_CALCULATE:
+                required = ["age_band","education_level","language_score","canadian_work_months"]
+                if sum(1 for f in required if getattr(session.profile, f, None) is not None) >= 3:
+                    tool_results.append(policy_tool_module.run_tool(
+                        ToolRequest(tool_name="crs_calculator", parameters=session.profile.model_dump())
+                    ))
+            elif intent == agent_module.INTENT_VISUALIZE:
+                tool_results.append(policy_tool_module.run_tool(
+                    ToolRequest(tool_name="pathway_backbone", parameters=session.profile.model_dump())
+                ))
+
+            # Retry if no results
+            if not results:
+                results = retrieval_module.retrieve(RetrievalRequest(query=pipeline_query))
+
+            # Step 4: risk routing
+            risk_level, risk_explain = agent_module.route_risk_with_explain(
+                session.profile, results, user_text=pipeline_query
+            )
+
+            # Step 5: prepare stream context
+            early_answer, messages, citations, confidence_warning, action_type = \
+                agent_module.prepare_stream_context(
+                    session.profile, results, tool_results, risk_level,
+                    user_text=pipeline_query,
+                    risk_explain=risk_explain,
+                    intent_scores=intent_scores,
+                    intent_top2=intent_top2,
+                    intent_ambiguous=intent_ambiguous,
+                    conv_history=conv_history,
+                )
+
+            # Early return for L3 / no-evidence
+            if early_answer is not None:
+                clean = _clean_answer_text(early_answer.answer)
+                conv_history.append({"role": "assistant", "content": clean})
+                yield f"data: {json.dumps({'type':'done','answer':clean,'citations':[],'risk_level':risk_level.value,'action_type':action_type.value if action_type else None,'confidence_warning':confidence_warning,'retry_count':0,**base_meta})}\n\n"
+                return
+
+            # Step 6: stream LLM tokens
+            yield f"data: {json.dumps({'type':'status','message':'Generating answer…'})}\n\n"
+            full_text = []
+            for token in generate_stream(messages):
+                full_text.append(token)
+                yield f"data: {json.dumps({'type':'token','content':token})}\n\n"
+
+            answer_text = _clean_answer_text("".join(full_text))
+            conv_history.append({"role": "assistant", "content": answer_text})
+
+            citations_data = [c.model_dump() for c in citations]
+            yield f"data: {json.dumps({'type':'done','answer':answer_text,'citations':citations_data,'risk_level':risk_level.value,'action_type':action_type.value if action_type else None,'confidence_warning':confidence_warning,'retry_count':0,**base_meta})}\n\n"
+
+        except Exception as exc:
+            yield f"data: {json.dumps({'type':'error','message':str(exc)})}\n\n"
+
+    return Response(
+        stream_with_context(_generate()),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @app.route("/api/session/<session_id>", methods=["GET"])
 def get_session(session_id: str):
     """Return current session state (profile + conversation state)."""
@@ -397,15 +637,8 @@ def get_session(session_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Entry point
+# Status endpoint (used by frontend banner)
 # ---------------------------------------------------------------------------
-
-if __name__ == "__main__":
-    print("Starting Canada PR Navigator web server on http://localhost:5050")
-    print(f"Web UI:  http://localhost:5050/")
-    print(f"API:     http://localhost:5050/api/health")
-    app.run(host="0.0.0.0", port=5050, debug=True)
-
 
 @app.route("/api/status", methods=["GET"])
 def status():
@@ -434,3 +667,15 @@ def status():
             else "Retrieval index not built yet. Run: python -m src.ingestion_module"
         ),
     })
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    print("Starting Canada PR Navigator web server on http://localhost:5050")
+    print(f"Web UI:  http://localhost:5050/")
+    print(f"API:     http://localhost:5050/api/health")
+    _prewarm_retrieval_index()
+    app.run(host="0.0.0.0", port=5050, debug=False, use_reloader=False)

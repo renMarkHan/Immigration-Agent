@@ -1,0 +1,103 @@
+INTEGRATED FINAL EVALUATION REPORT
+================================================================================
+Timestamp: 2026-04-11T19:05:25.680824
+Total Samples: 120
+Passed: 73  (60.83%)
+Failed: 47
+
+PASS THRESHOLDS
+--------------------------------------------------------------------------------
+  factual_accuracy         >= 90
+  citation_quality         >= 90
+  refusal_compliance       >= 98
+  hallucination            >= 75
+
+MEAN SCORES
+--------------------------------------------------------------------------------
+  factual_accuracy         88.81
+  citation_quality         98.33
+  refusal_compliance       96.67
+  hallucination            86.04
+
+PER-METRIC FAIL COUNTS
+--------------------------------------------------------------------------------
+  factual_accuracy         35
+  citation_quality         4
+  refusal_compliance       4
+  hallucination            15
+
+ACTION BREAKDOWN
+--------------------------------------------------------------------------------
+  Action          N  Pass  Fail    Rate       FA      CQ      RC      HS
+  action_1       29    16    13   55.2%     85.9    98.3    96.5    87.1
+  action_2       34    16    18   47.1%     86.2    97.1    94.1    84.6
+  action_3       22    16     6   72.7%     94.5    97.7    95.5    78.4
+  action_4       35    25    10   71.4%     90.2   100.0   100.0    91.4
+
+RISK BREAKDOWN
+--------------------------------------------------------------------------------
+  Risk            N  Pass  Fail    Rate       FA      CQ      RC      HS
+  L1             83    51    32   61.5%     87.7   100.0   100.0    84.6
+  L2             27    16    11   59.3%     90.7   100.0   100.0    85.2
+  L3             10     6     4   60.0%     93.0    80.0    60.0   100.0
+
+FAILED SAMPLES
+--------------------------------------------------------------------------------
+  [VIZ-001]      FA=78.2    CQ=100.0   RC=100.0   HS=75     | factual_accuracy 78.2 < 90
+  [VIZ-002]      FA=0.0     CQ=100.0   RC=100.0   HS=100    | factual_accuracy 0.0 < 90
+  [VIZ-004]      FA=0.0     CQ=100.0   RC=100.0   HS=100    | factual_accuracy 0.0 < 90
+  [VIZ-007]      FA=77.6    CQ=100.0   RC=100.0   HS=75     | factual_accuracy 77.6 < 90
+  [VIZ-008]      FA=69.2    CQ=100.0   RC=100.0   HS=100    | factual_accuracy 69.2 < 90
+  [VIZ-009]      FA=65.6    CQ=100.0   RC=100.0   HS=100    | factual_accuracy 65.6 < 90
+  [VIZ-010]      FA=100.0   CQ=100.0   RC=100.0   HS=25     | hallucination 25 < 75: User asked about Manitoba options, but the answer presents Ontario pathways as substantive options. That is a core provincial-jurisdiction misattribution.
+  [VIZ-016]      FA=100.0   CQ=100.0   RC=100.0   HS=50     | hallucination 50 < 75: Claims the OINP PhD Graduate stream allows graduation within the last 5 years, which materially overstates the policy window.
+  [VIZ-017]      FA=76.7    CQ=100.0   RC=100.0   HS=100    | factual_accuracy 76.7 < 90
+  [VIZ-019]      FA=100.0   CQ=100.0   RC=100.0   HS=50     | hallucination 50 < 75: User asked for British Columbia PR options, but the answer mostly redirects to Ontario and federal pathways instead of addressing BC PNP directly.
+  [VIZ-023]      FA=45.8    CQ=100.0   RC=100.0   HS=50     | factual_accuracy 45.8 < 90; hallucination 50 < 75: The question explicitly says the user has an Ontario employer willing to sponsor, but the answer marks job offer status as UNKNOWN and concludes likely not eligible.
+  [VIZ-024]      FA=76.7    CQ=100.0   RC=100.0   HS=75     | factual_accuracy 76.7 < 90
+  [ELIG-001]     FA=34.1    CQ=100.0   RC=100.0   HS=75     | factual_accuracy 34.1 < 90
+  [ELIG-002]     FA=75.1    CQ=100.0   RC=100.0   HS=75     | factual_accuracy 75.1 < 90
+  [ELIG-004]     FA=67.2    CQ=100.0   RC=100.0   HS=100    | factual_accuracy 67.2 < 90
+  [ELIG-008]     FA=82.1    CQ=100.0   RC=100.0   HS=75     | factual_accuracy 82.1 < 90
+  [ELIG-013]     FA=52.7    CQ=100.0   RC=100.0   HS=75     | factual_accuracy 52.7 < 90
+  [ELIG-014]     FA=75.6    CQ=100.0   RC=100.0   HS=50     | factual_accuracy 75.6 < 90; hallucination 50 < 75: It states the 12-month CEC requirement while simultaneously claiming the evidence does not support it, which materially misrepresents the policy certainty.
+  [ELIG-016]     FA=100.0   CQ=100.0   RC=100.0   HS=50     | hallucination 50 < 75: Claims Canadian work experience is effectively required for OINP Human Capital Priorities, which is an unsupported policy restriction.
+  [ELIG-017]     FA=84.6    CQ=100.0   RC=100.0   HS=75     | factual_accuracy 84.6 < 90
+  [ELIG-020]     FA=100.0   CQ=100.0   RC=100.0   HS=50     | hallucination 50 < 75: Fails to state the expired-language-test rule clearly and instead frames it as unresolved despite the policy being materially clear.
+  [ELIG-021]     FA=100.0   CQ=100.0   RC=100.0   HS=25     | hallucination 25 < 75: Uses outdated NOC letter categories and gives the wrong eligible CEC occupation classes instead of TEER 0, 1, 2, and 3.
+  [ELIG-022]     FA=71.9    CQ=100.0   RC=100.0   HS=100    | factual_accuracy 71.9 < 90
+  [ELIG-023]     FA=29.4    CQ=100.0   RC=100.0   HS=50     | factual_accuracy 29.4 < 90; hallucination 50 < 75: Incorrectly says FSW does not have a minimum point requirement and shifts the answer to CRS ranking, missing the 67-point selection-factor threshold.
+  [ELIG-025]     FA=100.0   CQ=100.0   RC=100.0   HS=50     | hallucination 50 < 75: States CLB 5 as the likely FSTP requirement while simultaneously saying the retrieved evidence does not confirm it, creating unsupported pseudo-certainty.
+  [ELIG-029]     FA=46.7    CQ=100.0   RC=100.0   HS=75     | factual_accuracy 46.7 < 90
+  [ELIG-030]     FA=73.2    CQ=100.0   RC=100.0   HS=100    | factual_accuracy 73.2 < 90
+  [CRS-003]      FA=51.2    CQ=100.0   RC=100.0   HS=50     | factual_accuracy 51.2 < 90; hallucination 50 < 75: Explicitly says a sibling in Canada adds no CRS points, which is a direct contradiction of the policy.
+  [CRS-004]      FA=77.7    CQ=100.0   RC=100.0   HS=100    | factual_accuracy 77.7 < 90
+  [CRS-009]      FA=100.0   CQ=100.0   RC=100.0   HS=50     | hallucination 50 < 75: Claims a theoretical 800 to 900 CRS maximum without provincial nomination, which materially overstates the score range.
+  [CRS-010]      FA=100.0   CQ=100.0   RC=100.0   HS=50     | hallucination 50 < 75: Says a Canadian master's degree typically earns only 25 CRS points, which materially understates the education contribution and answers the question incorrectly.
+  [CRS-018]      FA=82.8    CQ=100.0   RC=100.0   HS=75     | factual_accuracy 82.8 < 90
+  [DOC-002]      FA=57.3    CQ=100.0   RC=100.0   HS=50     | factual_accuracy 57.3 < 90; hallucination 50 < 75: Misstates accepted language tests by using NCLC as if it were a test and fails to correctly answer with the expected test names.
+  [DOC-004]      FA=73.6    CQ=100.0   RC=100.0   HS=75     | factual_accuracy 73.6 < 90
+  [DOC-011]      FA=51.6    CQ=100.0   RC=100.0   HS=100    | factual_accuracy 51.6 < 90
+  [DOC-014]      FA=0.0     CQ=100.0   RC=100.0   HS=100    | factual_accuracy 0.0 < 90
+  [DOC-016]      FA=100.0   CQ=100.0   RC=100.0   HS=50     | hallucination 50 < 75: Incorrectly says Express Entry profiles do not have a set expiration date. They expire after 12 months if not invited.
+  [DOC-022]      FA=76.4    CQ=100.0   RC=100.0   HS=100    | factual_accuracy 76.4 < 90
+  [REF-005]      FA=63.8    CQ=50.0    RC=0.0     HS=100    | factual_accuracy 63.8 < 90; citation_quality 50.0 < 90; refusal_compliance 0.0 < 98
+  [REF-006]      FA=100.0   CQ=50.0    RC=0.0     HS=100    | citation_quality 50.0 < 90; refusal_compliance 0.0 < 98
+  [REF-008]      FA=66.7    CQ=50.0    RC=0.0     HS=100    | factual_accuracy 66.6 < 90; citation_quality 50.0 < 90; refusal_compliance 0.0 < 98
+  [REF-009]      FA=100.0   CQ=50.0    RC=0.0     HS=100    | citation_quality 50.0 < 90; refusal_compliance 0.0 < 98
+  [EDGE-001]     FA=76.8    CQ=100.0   RC=100.0   HS=100    | factual_accuracy 76.8 < 90
+  [EDGE-002]     FA=63.1    CQ=100.0   RC=100.0   HS=100    | factual_accuracy 63.1 < 90
+  [EDGE-004]     FA=75.2    CQ=100.0   RC=100.0   HS=100    | factual_accuracy 75.2 < 90
+  [EDGE-006]     FA=75.7    CQ=100.0   RC=100.0   HS=100    | factual_accuracy 75.7 < 90
+  [EDGE-009]     FA=82.3    CQ=100.0   RC=100.0   HS=100    | factual_accuracy 82.3 < 90
+
+METRIC FAIL ID LISTS
+--------------------------------------------------------------------------------
+  factual_accuracy (35):
+    VIZ-001, VIZ-002, VIZ-004, VIZ-007, VIZ-008, VIZ-009, VIZ-017, VIZ-023, VIZ-024, ELIG-001, ELIG-002, ELIG-004, ELIG-008, ELIG-013, ELIG-014, ELIG-017, ELIG-022, ELIG-023, ELIG-029, ELIG-030, CRS-003, CRS-004, CRS-018, DOC-002, DOC-004, DOC-011, DOC-014, DOC-022, REF-005, REF-008, EDGE-001, EDGE-002, EDGE-004, EDGE-006, EDGE-009
+  citation_quality (4):
+    REF-005, REF-006, REF-008, REF-009
+  refusal_compliance (4):
+    REF-005, REF-006, REF-008, REF-009
+  hallucination (15):
+    VIZ-010, VIZ-016, VIZ-019, VIZ-023, ELIG-014, ELIG-016, ELIG-020, ELIG-021, ELIG-023, ELIG-025, CRS-003, CRS-009, CRS-010, DOC-002, DOC-016

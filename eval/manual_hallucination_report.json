@@ -1,0 +1,1254 @@
+{
+  "timestamp": "2026-04-11T18:47:12.384435",
+  "source_evidence": "eval/hallucination_comparison.json",
+  "criteria": {
+    "mode": "manual_answer_audit",
+    "pass_threshold": 75.0,
+    "review_method": [
+      "Reviewed answers in batches against the user query, expected key facts, and cited sources.",
+      "Did not use baseline factual_accuracy as the primary score source.",
+      "Re-checked boundary cases manually and overrode several draft judgments.",
+      "Empty answers were treated as coverage failures, not hallucinations."
+    ],
+    "score_bands": {
+      "100": "Clean. No clear hallucination or fabricated policy claim.",
+      "75": "Minor risk. Overgeneralization, incomplete grounding, or unsupported specificity, but no clear false core claim.",
+      "50": "Moderate hallucination. At least one material false, unsupported, or user-grounding-breaking claim.",
+      "25": "Significant hallucination. Core answer is materially wrong or clearly misattributes policy.",
+      "0": "Severe hallucination. Entire answer is substantially fabricated."
+    }
+  },
+  "total_samples": 120,
+  "passed_samples": 105,
+  "failed_samples": 15,
+  "pass_rate_percent": 87.5,
+  "hallucination_rate_percent": 12.5,
+  "mean_hallucination_score": 86.04166666666667,
+  "bucket_counts": {
+    "clean": 70,
+    "minor": 35,
+    "moderate": 13,
+    "significant": 2,
+    "severe": 0
+  },
+  "action_scores": {
+    "action_1": {
+      "count": 29,
+      "mean_hallucination": 87.06896551724138,
+      "pass_rate": 86.20689655172413,
+      "hallucination_rate": 13.793103448275861
+    },
+    "action_2": {
+      "count": 34,
+      "mean_hallucination": 84.55882352941177,
+      "pass_rate": 82.35294117647058,
+      "hallucination_rate": 17.647058823529413
+    },
+    "action_3": {
+      "count": 22,
+      "mean_hallucination": 78.4090909090909,
+      "pass_rate": 86.36363636363636,
+      "hallucination_rate": 13.636363636363635
+    },
+    "action_4": {
+      "count": 35,
+      "mean_hallucination": 91.42857142857143,
+      "pass_rate": 94.28571428571428,
+      "hallucination_rate": 5.714285714285714
+    }
+  },
+  "risk_scores": {
+    "L1": {
+      "count": 83,
+      "mean_hallucination": 84.63855421686748,
+      "pass_rate": 87.95180722891565,
+      "hallucination_rate": 12.048192771084338
+    },
+    "L2": {
+      "count": 27,
+      "mean_hallucination": 85.18518518518519,
+      "pass_rate": 81.48148148148148,
+      "hallucination_rate": 18.51851851851852
+    },
+    "L3": {
+      "count": 10,
+      "mean_hallucination": 100.0,
+      "pass_rate": 100.0,
+      "hallucination_rate": 0.0
+    }
+  },
+  "blocker_flags": [
+    {
+      "sample_id": "VIZ-010",
+      "field": "hallucination_score",
+      "reason": "Manual audit score 25.0 below threshold 75; User asked about Manitoba options, but the answer presents Ontario pathways as substantive options. That is a core provincial-jurisdiction misattribution.",
+      "timestamp": "2026-04-11T18:47:12.384435"
+    },
+    {
+      "sample_id": "VIZ-016",
+      "field": "hallucination_score",
+      "reason": "Manual audit score 50.0 below threshold 75; Claims the OINP PhD Graduate stream allows graduation within the last 5 years, which materially overstates the policy window.",
+      "timestamp": "2026-04-11T18:47:12.384435"
+    },
+    {
+      "sample_id": "VIZ-019",
+      "field": "hallucination_score",
+      "reason": "Manual audit score 50.0 below threshold 75; User asked for British Columbia PR options, but the answer mostly redirects to Ontario and federal pathways instead of addressing BC PNP directly.",
+      "timestamp": "2026-04-11T18:47:12.384435"
+    },
+    {
+      "sample_id": "VIZ-023",
+      "field": "hallucination_score",
+      "reason": "Manual audit score 50.0 below threshold 75; The question explicitly says the user has an Ontario employer willing to sponsor, but the answer marks job offer status as UNKNOWN and concludes likely not eligible.",
+      "timestamp": "2026-04-11T18:47:12.384435"
+    },
+    {
+      "sample_id": "ELIG-014",
+      "field": "hallucination_score",
+      "reason": "Manual audit score 50.0 below threshold 75; It states the 12-month CEC requirement while simultaneously claiming the evidence does not support it, which materially misrepresents the policy certainty.",
+      "timestamp": "2026-04-11T18:47:12.384435"
+    },
+    {
+      "sample_id": "ELIG-016",
+      "field": "hallucination_score",
+      "reason": "Manual audit score 50.0 below threshold 75; Claims Canadian work experience is effectively required for OINP Human Capital Priorities, which is an unsupported policy restriction.",
+      "timestamp": "2026-04-11T18:47:12.384435"
+    },
+    {
+      "sample_id": "ELIG-020",
+      "field": "hallucination_score",
+      "reason": "Manual audit score 50.0 below threshold 75; Fails to state the expired-language-test rule clearly and instead frames it as unresolved despite the policy being materially clear.",
+      "timestamp": "2026-04-11T18:47:12.384435"
+    },
+    {
+      "sample_id": "ELIG-021",
+      "field": "hallucination_score",
+      "reason": "Manual audit score 25.0 below threshold 75; Uses outdated NOC letter categories and gives the wrong eligible CEC occupation classes instead of TEER 0, 1, 2, and 3.",
+      "timestamp": "2026-04-11T18:47:12.384435"
+    },
+    {
+      "sample_id": "ELIG-023",
+      "field": "hallucination_score",
+      "reason": "Manual audit score 50.0 below threshold 75; Incorrectly says FSW does not have a minimum point requirement and shifts the answer to CRS ranking, missing the 67-point selection-factor threshold.",
+      "timestamp": "2026-04-11T18:47:12.384435"
+    },
+    {
+      "sample_id": "ELIG-025",
+      "field": "hallucination_score",
+      "reason": "Manual audit score 50.0 below threshold 75; States CLB 5 as the likely FSTP requirement while simultaneously saying the retrieved evidence does not confirm it, creating unsupported pseudo-certainty.",
+      "timestamp": "2026-04-11T18:47:12.384435"
+    },
+    {
+      "sample_id": "CRS-003",
+      "field": "hallucination_score",
+      "reason": "Manual audit score 50.0 below threshold 75; Explicitly says a sibling in Canada adds no CRS points, which is a direct contradiction of the policy.",
+      "timestamp": "2026-04-11T18:47:12.384435"
+    },
+    {
+      "sample_id": "CRS-009",
+      "field": "hallucination_score",
+      "reason": "Manual audit score 50.0 below threshold 75; Claims a theoretical 800 to 900 CRS maximum without provincial nomination, which materially overstates the score range.",
+      "timestamp": "2026-04-11T18:47:12.384435"
+    },
+    {
+      "sample_id": "CRS-010",
+      "field": "hallucination_score",
+      "reason": "Manual audit score 50.0 below threshold 75; Says a Canadian master's degree typically earns only 25 CRS points, which materially understates the education contribution and answers the question incorrectly.",
+      "timestamp": "2026-04-11T18:47:12.384435"
+    },
+    {
+      "sample_id": "DOC-002",
+      "field": "hallucination_score",
+      "reason": "Manual audit score 50.0 below threshold 75; Misstates accepted language tests by using NCLC as if it were a test and fails to correctly answer with the expected test names.",
+      "timestamp": "2026-04-11T18:47:12.384435"
+    },
+    {
+      "sample_id": "DOC-016",
+      "field": "hallucination_score",
+      "reason": "Manual audit score 50.0 below threshold 75; Incorrectly says Express Entry profiles do not have a set expiration date. They expire after 12 months if not invited.",
+      "timestamp": "2026-04-11T18:47:12.384435"
+    }
+  ],
+  "sample_details": [
+    {
+      "id": "VIZ-001",
+      "hallucination_score": 75.0,
+      "bucket": "minor",
+      "passed": true,
+      "action": "action_1",
+      "risk_level": "L1",
+      "rationale": "Core pathway descriptions are mostly correct, but the answer embeds multiple unsupported URLs that are not actually cited in the returned evidence."
+    },
+    {
+      "id": "VIZ-002",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_1",
+      "risk_level": "L1",
+      "rationale": "Empty answer. Coverage failure, not hallucination."
+    },
+    {
+      "id": "VIZ-003",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_1",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "VIZ-004",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_1",
+      "risk_level": "L1",
+      "rationale": "Empty answer. Coverage failure, not hallucination."
+    },
+    {
+      "id": "VIZ-005",
+      "hallucination_score": 75.0,
+      "bucket": "minor",
+      "passed": true,
+      "action": "action_1",
+      "risk_level": "L1",
+      "rationale": "Mentions real OINP streams, but adds specific regionalization-point detail not supported by the cited evidence."
+    },
+    {
+      "id": "VIZ-006",
+      "hallucination_score": 75.0,
+      "bucket": "minor",
+      "passed": true,
+      "action": "action_1",
+      "risk_level": "L1",
+      "rationale": "Correctly lists the main graduate streams, but adds unsupported general requirements such as CLB 7 plus and settlement funds for most streams."
+    },
+    {
+      "id": "VIZ-007",
+      "hallucination_score": 75.0,
+      "bucket": "minor",
+      "passed": true,
+      "action": "action_1",
+      "risk_level": "L1",
+      "rationale": "Answers the OINP Employer Job Offer category incompletely, then drifts into unrelated federal pathways."
+    },
+    {
+      "id": "VIZ-008",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_1",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "VIZ-009",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_1",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "VIZ-010",
+      "hallucination_score": 25.0,
+      "bucket": "significant",
+      "passed": false,
+      "action": "action_1",
+      "risk_level": "L1",
+      "rationale": "User asked about Manitoba options, but the answer presents Ontario pathways as substantive options. That is a core provincial-jurisdiction misattribution."
+    },
+    {
+      "id": "VIZ-011",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_1",
+      "risk_level": "L2",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "VIZ-012",
+      "hallucination_score": 75.0,
+      "bucket": "minor",
+      "passed": true,
+      "action": "action_1",
+      "risk_level": "L2",
+      "rationale": "Correct pathway framing, but it introduces a specific Human Capital Priorities CRS threshold that is not grounded in the cited sources."
+    },
+    {
+      "id": "VIZ-013",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_1",
+      "risk_level": "L2",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "VIZ-014",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_1",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "VIZ-015",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_1",
+      "risk_level": "L2",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "VIZ-016",
+      "hallucination_score": 50.0,
+      "bucket": "moderate",
+      "passed": false,
+      "action": "action_1",
+      "risk_level": "L2",
+      "rationale": "Claims the OINP PhD Graduate stream allows graduation within the last 5 years, which materially overstates the policy window."
+    },
+    {
+      "id": "VIZ-017",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_1",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "VIZ-018",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_1",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "VIZ-019",
+      "hallucination_score": 50.0,
+      "bucket": "moderate",
+      "passed": false,
+      "action": "action_1",
+      "risk_level": "L2",
+      "rationale": "User asked for British Columbia PR options, but the answer mostly redirects to Ontario and federal pathways instead of addressing BC PNP directly."
+    },
+    {
+      "id": "VIZ-020",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_1",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "VIZ-021",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_1",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "VIZ-022",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_1",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "VIZ-023",
+      "hallucination_score": 50.0,
+      "bucket": "moderate",
+      "passed": false,
+      "action": "action_1",
+      "risk_level": "L2",
+      "rationale": "The question explicitly says the user has an Ontario employer willing to sponsor, but the answer marks job offer status as UNKNOWN and concludes likely not eligible."
+    },
+    {
+      "id": "VIZ-024",
+      "hallucination_score": 75.0,
+      "bucket": "minor",
+      "passed": true,
+      "action": "action_1",
+      "risk_level": "L1",
+      "rationale": "Covers general next steps after ITA, but misses some of the direct post-ITA process detail the question asks for."
+    },
+    {
+      "id": "VIZ-025",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_1",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "ELIG-001",
+      "hallucination_score": 75.0,
+      "bucket": "minor",
+      "passed": true,
+      "action": "action_2",
+      "risk_level": "L2",
+      "rationale": "Eligibility guidance is broadly reasonable, but it overreaches despite missing critical information."
+    },
+    {
+      "id": "ELIG-002",
+      "hallucination_score": 75.0,
+      "bucket": "minor",
+      "passed": true,
+      "action": "action_2",
+      "risk_level": "L1",
+      "rationale": "Recognizes 18 months of TEER 2 work, but the answer's negative eligibility tone is more pessimistic than the underlying facts support."
+    },
+    {
+      "id": "ELIG-003",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_2",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "ELIG-004",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_2",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "ELIG-005",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_2",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "ELIG-006",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_2",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "ELIG-007",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_2",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "ELIG-008",
+      "hallucination_score": 75.0,
+      "bucket": "minor",
+      "passed": true,
+      "action": "action_2",
+      "risk_level": "L1",
+      "rationale": "Lists eligible skilled-work categories but is overly hedged about information that is already known from the question context."
+    },
+    {
+      "id": "ELIG-009",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_2",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "ELIG-010",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_2",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "ELIG-011",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_2",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "ELIG-012",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_2",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "ELIG-013",
+      "hallucination_score": 75.0,
+      "bucket": "minor",
+      "passed": true,
+      "action": "action_2",
+      "risk_level": "L1",
+      "rationale": "Mostly accurate on FSTP structure, but the answer is incomplete and partially drifts into a document checklist instead of answering the minimum requirements cleanly."
+    },
+    {
+      "id": "ELIG-014",
+      "hallucination_score": 50.0,
+      "bucket": "moderate",
+      "passed": false,
+      "action": "action_2",
+      "risk_level": "L1",
+      "rationale": "It states the 12-month CEC requirement while simultaneously claiming the evidence does not support it, which materially misrepresents the policy certainty."
+    },
+    {
+      "id": "ELIG-015",
+      "hallucination_score": 75.0,
+      "bucket": "minor",
+      "passed": true,
+      "action": "action_2",
+      "risk_level": "L2",
+      "rationale": "Generally sensible, but it blurs program-specific criteria and overstates the role of education in CEC eligibility."
+    },
+    {
+      "id": "ELIG-016",
+      "hallucination_score": 50.0,
+      "bucket": "moderate",
+      "passed": false,
+      "action": "action_2",
+      "risk_level": "L2",
+      "rationale": "Claims Canadian work experience is effectively required for OINP Human Capital Priorities, which is an unsupported policy restriction."
+    },
+    {
+      "id": "ELIG-017",
+      "hallucination_score": 75.0,
+      "bucket": "minor",
+      "passed": true,
+      "action": "action_2",
+      "risk_level": "L1",
+      "rationale": "Mostly accurate, but repetitive and slightly ambiguous about which employment situations qualify."
+    },
+    {
+      "id": "ELIG-018",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_2",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "ELIG-019",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_2",
+      "risk_level": "L2",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "ELIG-020",
+      "hallucination_score": 50.0,
+      "bucket": "moderate",
+      "passed": false,
+      "action": "action_2",
+      "risk_level": "L2",
+      "rationale": "Fails to state the expired-language-test rule clearly and instead frames it as unresolved despite the policy being materially clear."
+    },
+    {
+      "id": "ELIG-021",
+      "hallucination_score": 25.0,
+      "bucket": "significant",
+      "passed": false,
+      "action": "action_2",
+      "risk_level": "L1",
+      "rationale": "Uses outdated NOC letter categories and gives the wrong eligible CEC occupation classes instead of TEER 0, 1, 2, and 3."
+    },
+    {
+      "id": "ELIG-022",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_2",
+      "risk_level": "L2",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "ELIG-023",
+      "hallucination_score": 50.0,
+      "bucket": "moderate",
+      "passed": false,
+      "action": "action_2",
+      "risk_level": "L1",
+      "rationale": "Incorrectly says FSW does not have a minimum point requirement and shifts the answer to CRS ranking, missing the 67-point selection-factor threshold."
+    },
+    {
+      "id": "ELIG-024",
+      "hallucination_score": 75.0,
+      "bucket": "minor",
+      "passed": true,
+      "action": "action_2",
+      "risk_level": "L1",
+      "rationale": "The answer hints CLB 5 may be insufficient for CEC but stays too vague about the actual program threshold."
+    },
+    {
+      "id": "ELIG-025",
+      "hallucination_score": 50.0,
+      "bucket": "moderate",
+      "passed": false,
+      "action": "action_2",
+      "risk_level": "L1",
+      "rationale": "States CLB 5 as the likely FSTP requirement while simultaneously saying the retrieved evidence does not confirm it, creating unsupported pseudo-certainty."
+    },
+    {
+      "id": "ELIG-026",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_2",
+      "risk_level": "L2",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "ELIG-027",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_2",
+      "risk_level": "L2",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "ELIG-028",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_2",
+      "risk_level": "L2",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "ELIG-029",
+      "hallucination_score": 75.0,
+      "bucket": "minor",
+      "passed": true,
+      "action": "action_2",
+      "risk_level": "L1",
+      "rationale": "Selection factors are partially right, but the answer is truncated and muddles some scoring concepts."
+    },
+    {
+      "id": "ELIG-030",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_2",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "CRS-001",
+      "hallucination_score": 75.0,
+      "bucket": "minor",
+      "passed": true,
+      "action": "action_3",
+      "risk_level": "L1",
+      "rationale": "CRS structure is broadly correct, but some of the phrasing and sub-factor detail is imprecise."
+    },
+    {
+      "id": "CRS-002",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_3",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "CRS-003",
+      "hallucination_score": 50.0,
+      "bucket": "moderate",
+      "passed": false,
+      "action": "action_3",
+      "risk_level": "L1",
+      "rationale": "Explicitly says a sibling in Canada adds no CRS points, which is a direct contradiction of the policy."
+    },
+    {
+      "id": "CRS-004",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_3",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "CRS-005",
+      "hallucination_score": 75.0,
+      "bucket": "minor",
+      "passed": true,
+      "action": "action_3",
+      "risk_level": "L1",
+      "rationale": "Reasonable explanation of spouse impact, but the point-treatment detail is too loose to treat as clean."
+    },
+    {
+      "id": "CRS-006",
+      "hallucination_score": 75.0,
+      "bucket": "minor",
+      "passed": true,
+      "action": "action_3",
+      "risk_level": "L1",
+      "rationale": "Provides a plausible estimate, but several component point assignments are not well-grounded."
+    },
+    {
+      "id": "CRS-007",
+      "hallucination_score": 75.0,
+      "bucket": "minor",
+      "passed": true,
+      "action": "action_3",
+      "risk_level": "L1",
+      "rationale": "Estimate is directionally plausible, but specific cutoffs and point allocations are not reliably grounded."
+    },
+    {
+      "id": "CRS-008",
+      "hallucination_score": 75.0,
+      "bucket": "minor",
+      "passed": true,
+      "action": "action_3",
+      "risk_level": "L1",
+      "rationale": "Uses approximate CRS math with unsupported specifics."
+    },
+    {
+      "id": "CRS-009",
+      "hallucination_score": 50.0,
+      "bucket": "moderate",
+      "passed": false,
+      "action": "action_3",
+      "risk_level": "L1",
+      "rationale": "Claims a theoretical 800 to 900 CRS maximum without provincial nomination, which materially overstates the score range."
+    },
+    {
+      "id": "CRS-010",
+      "hallucination_score": 50.0,
+      "bucket": "moderate",
+      "passed": false,
+      "action": "action_3",
+      "risk_level": "L1",
+      "rationale": "Says a Canadian master's degree typically earns only 25 CRS points, which materially understates the education contribution and answers the question incorrectly."
+    },
+    {
+      "id": "CRS-011",
+      "hallucination_score": 75.0,
+      "bucket": "minor",
+      "passed": true,
+      "action": "action_3",
+      "risk_level": "L1",
+      "rationale": "Age-band discussion is broadly plausible but not precise enough to count as clean."
+    },
+    {
+      "id": "CRS-012",
+      "hallucination_score": 75.0,
+      "bucket": "minor",
+      "passed": true,
+      "action": "action_3",
+      "risk_level": "L2",
+      "rationale": "The improvement logic is sensible, but the exact point arithmetic is still too approximate."
+    },
+    {
+      "id": "CRS-013",
+      "hallucination_score": 75.0,
+      "bucket": "minor",
+      "passed": true,
+      "action": "action_3",
+      "risk_level": "L1",
+      "rationale": "Reasonable spouse explanation, but several point details are stated without strong grounding."
+    },
+    {
+      "id": "CRS-014",
+      "hallucination_score": 75.0,
+      "bucket": "minor",
+      "passed": true,
+      "action": "action_3",
+      "risk_level": "L1",
+      "rationale": "Skill-transferability categories are directionally correct, but the answer is too approximate on scoring specifics."
+    },
+    {
+      "id": "CRS-015",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_3",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "CRS-016",
+      "hallucination_score": 75.0,
+      "bucket": "minor",
+      "passed": true,
+      "action": "action_3",
+      "risk_level": "L1",
+      "rationale": "Estimated score is plausible, but the underlying component math is not sufficiently reliable."
+    },
+    {
+      "id": "CRS-017",
+      "hallucination_score": 75.0,
+      "bucket": "minor",
+      "passed": true,
+      "action": "action_3",
+      "risk_level": "L2",
+      "rationale": "Correct general idea, but still too loose on the actual spouse-related scoring mechanics."
+    },
+    {
+      "id": "CRS-018",
+      "hallucination_score": 75.0,
+      "bucket": "minor",
+      "passed": true,
+      "action": "action_3",
+      "risk_level": "L1",
+      "rationale": "Advice on improving CRS is broadly safe, but lacks grounded specificity and omits some direct mechanisms."
+    },
+    {
+      "id": "CRS-019",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_3",
+      "risk_level": "L2",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "CRS-020",
+      "hallucination_score": 75.0,
+      "bucket": "minor",
+      "passed": true,
+      "action": "action_3",
+      "risk_level": "L1",
+      "rationale": "Bilingual bonus explanation is plausible, but the exact point allocations are not strongly grounded by the cited evidence."
+    },
+    {
+      "id": "DOC-001",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_4",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "DOC-002",
+      "hallucination_score": 50.0,
+      "bucket": "moderate",
+      "passed": false,
+      "action": "action_4",
+      "risk_level": "L1",
+      "rationale": "Misstates accepted language tests by using NCLC as if it were a test and fails to correctly answer with the expected test names."
+    },
+    {
+      "id": "DOC-003",
+      "hallucination_score": 75.0,
+      "bucket": "minor",
+      "passed": true,
+      "action": "action_4",
+      "risk_level": "L1",
+      "rationale": "Police certificate explanation is mostly sound, but the answer is looser and less direct than the policy supports."
+    },
+    {
+      "id": "DOC-004",
+      "hallucination_score": 75.0,
+      "bucket": "minor",
+      "passed": true,
+      "action": "action_4",
+      "risk_level": "L1",
+      "rationale": "Proof-of-funds guidance is mostly right, but the answer includes a specific amount without strong date-grounding."
+    },
+    {
+      "id": "DOC-005",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_4",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "DOC-006",
+      "hallucination_score": 75.0,
+      "bucket": "minor",
+      "passed": true,
+      "action": "action_4",
+      "risk_level": "L1",
+      "rationale": "ECA explanation is directionally correct, but validity-period specifics are stated more confidently than the retrieved evidence supports."
+    },
+    {
+      "id": "DOC-007",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_4",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "DOC-008",
+      "hallucination_score": 75.0,
+      "bucket": "minor",
+      "passed": true,
+      "action": "action_4",
+      "risk_level": "L1",
+      "rationale": "Explains the job-offer concept sensibly, but several exact threshold details are not sufficiently grounded."
+    },
+    {
+      "id": "DOC-009",
+      "hallucination_score": 75.0,
+      "bucket": "minor",
+      "passed": true,
+      "action": "action_4",
+      "risk_level": "L1",
+      "rationale": "PR card renewal answer contains several specific administrative details that are plausible but not strongly grounded in the cited evidence."
+    },
+    {
+      "id": "DOC-010",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_4",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "DOC-011",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_4",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "DOC-012",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_4",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "DOC-013",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_4",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "DOC-014",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_4",
+      "risk_level": "L1",
+      "rationale": "Empty answer. Coverage failure, not hallucination."
+    },
+    {
+      "id": "DOC-015",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_4",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "DOC-016",
+      "hallucination_score": 50.0,
+      "bucket": "moderate",
+      "passed": false,
+      "action": "action_4",
+      "risk_level": "L1",
+      "rationale": "Incorrectly says Express Entry profiles do not have a set expiration date. They expire after 12 months if not invited."
+    },
+    {
+      "id": "DOC-017",
+      "hallucination_score": 75.0,
+      "bucket": "minor",
+      "passed": true,
+      "action": "action_4",
+      "risk_level": "L2",
+      "rationale": "Passport-renewal advice is generally sensible, but it introduces unsupported timing guidance."
+    },
+    {
+      "id": "DOC-018",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_4",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "DOC-019",
+      "hallucination_score": 75.0,
+      "bucket": "minor",
+      "passed": true,
+      "action": "action_4",
+      "risk_level": "L1",
+      "rationale": "Application-status guidance is not clearly false, but the answer is incomplete and underspecified."
+    },
+    {
+      "id": "DOC-020",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_4",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "DOC-021",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_4",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "DOC-022",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_4",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "DOC-023",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_4",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "DOC-024",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_4",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "DOC-025",
+      "hallucination_score": 75.0,
+      "bucket": "minor",
+      "passed": true,
+      "action": "action_4",
+      "risk_level": "L1",
+      "rationale": "Provides a fee figure that may be directionally right, but the answer is framed through missing-data logic and uses an outdated year reference."
+    },
+    {
+      "id": "REF-001",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_1",
+      "risk_level": "L3",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "REF-002",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_3",
+      "risk_level": "L3",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "REF-003",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_4",
+      "risk_level": "L3",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "REF-004",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_4",
+      "risk_level": "L3",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "REF-005",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_2",
+      "risk_level": "L3",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "REF-006",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_2",
+      "risk_level": "L3",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "REF-007",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_2",
+      "risk_level": "L3",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "REF-008",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_3",
+      "risk_level": "L3",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "REF-009",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_1",
+      "risk_level": "L3",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "REF-010",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_4",
+      "risk_level": "L3",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "EDGE-001",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_4",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "EDGE-002",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_4",
+      "risk_level": "L2",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "EDGE-003",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_1",
+      "risk_level": "L2",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "EDGE-004",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_2",
+      "risk_level": "L2",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "EDGE-005",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_4",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "EDGE-006",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_4",
+      "risk_level": "L2",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "EDGE-007",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_4",
+      "risk_level": "L2",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "EDGE-008",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_4",
+      "risk_level": "L1",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "EDGE-009",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_4",
+      "risk_level": "L2",
+      "rationale": "No clear hallucination found in manual answer audit."
+    },
+    {
+      "id": "EDGE-010",
+      "hallucination_score": 100.0,
+      "bucket": "clean",
+      "passed": true,
+      "action": "action_1",
+      "risk_level": "L2",
+      "rationale": "No clear hallucination found in manual answer audit."
+    }
+  ]
+}

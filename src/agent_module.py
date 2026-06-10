@@ -903,6 +903,131 @@ def _stub_answer(
 
 
 # ===========================================================================
+# Streaming support — prepare_stream_context()
+# ===========================================================================
+
+def prepare_stream_context(
+    profile: IntakeProfile,
+    results: list[RetrievalResult],
+    tool_results: list[ToolResult],
+    risk_level: RiskLevel,
+    retry_count: int = 0,
+    user_text: str = "",
+    action_type: ActionType | None = None,
+    risk_explain: dict | None = None,
+    intent_scores: dict | None = None,
+    intent_top2: list | None = None,
+    intent_ambiguous: bool = False,
+    conv_history: list[dict] | None = None,
+) -> tuple[FinalAnswer | None, list[dict] | None, list, str, ActionType | None]:
+    """Prepare context for a streaming LLM response.
+
+    Runs the same logic as build_answer() up to the LLM call, then returns
+    the constructed messages list instead of blocking on generate().
+
+    Returns:
+        (early_answer, messages, citations, confidence_warning, action_type)
+        - early_answer  : set for L3 / no-evidence cases (skip streaming)
+        - messages      : LLM messages to pass to generate_stream()
+        - citations     : extracted Citation objects
+        - confidence_warning: low-confidence text (may be empty)
+        - action_type   : resolved ActionType for this turn
+    """
+    # Step 1: intent → action_type
+    intent = detect_intent(user_text) if user_text else INTENT_MATCH
+    if action_type is None:
+        action_type = _INTENT_TO_ACTION.get(intent, ActionType.ACTION_2)
+
+    # Step 2: L3 early return
+    if risk_level == RiskLevel.L3:
+        early = FinalAnswer(
+            answer=get_l3_refusal(),
+            risk_level=RiskLevel.L3,
+            action_type=action_type,
+            citations=[],
+            no_evidence_action=NoEvidenceAction.REFUSE,
+            retry_count=retry_count,
+            risk_explain=risk_explain,
+            intent_scores=intent_scores,
+            intent_top2=intent_top2,
+            intent_ambiguous=intent_ambiguous,
+        )
+        return early, None, [], "", action_type
+
+    # Step 3: no-evidence early return
+    if not results:
+        msg = _NO_EVIDENCE_MESSAGES.get(risk_level, _NO_EVIDENCE_MESSAGES[RiskLevel.L1])
+        nea = NoEvidenceAction.CITE_GAP if risk_level == RiskLevel.L1 else NoEvidenceAction.PARTIAL_ANSWER
+        early = FinalAnswer(
+            answer=msg,
+            risk_level=risk_level,
+            action_type=action_type,
+            citations=[],
+            no_evidence_action=nea,
+            retry_count=retry_count,
+            risk_explain=risk_explain,
+            intent_scores=intent_scores,
+            intent_top2=intent_top2,
+            intent_ambiguous=intent_ambiguous,
+        )
+        return early, None, [], "", action_type
+
+    # Step 4: build LLM messages
+    completeness = assess_completeness(profile)
+    confidence_warning = completeness.confidence_warning
+
+    evidence_block = _format_evidence_block(results, tool_results)
+    profile_block = profile_to_context(profile)
+
+    if intent == INTENT_QA:
+        _doc_kw = ["document", "documents", "checklist", "what do i need",
+                   "what to submit", "required documents", "supporting documents",
+                   "proof of", "evidence of"]
+        _is_doc = any(kw in user_text.lower() for kw in _doc_kw)
+        format_instructions = _ACTION_FORMAT["qa_document" if _is_doc else INTENT_QA]
+    else:
+        format_instructions = _ACTION_FORMAT.get(intent, _ACTION_FORMAT[INTENT_MATCH])
+
+    user_turn = (
+        f"USER QUERY:\n{user_text}\n\n"
+        f"{profile_block}\n\n"
+        f"RETRIEVED POLICY EVIDENCE:\n{evidence_block}\n\n"
+        f"RESPONSE FORMAT INSTRUCTIONS:\n{format_instructions}\n\n"
+        + (
+            f"IMPORTANT — LOW CONFIDENCE WARNING:\n{confidence_warning}\n"
+            "Append this warning verbatim at the end of your response.\n\n"
+            if confidence_warning else ""
+        )
+    )
+
+    action_name = _INTENT_ACTION_NAME.get(intent, "ACTION 2 — Eligibility Check")
+    action_override = (
+        f"=== ACTIVE ACTION FOR THIS TURN: {action_name} ===\n"
+        f"You MUST structure your entire response according to these instructions "
+        f"and IGNORE the generic OUTPUT FORMAT RULES below for this turn:\n\n"
+        f"{format_instructions}\n\n"
+        f"CRITICAL FORMATTING RULES (always apply):\n"
+        f"- Write list items consecutively with NO blank lines between them.\n"
+        f"- Never add a blank line after a bold heading or before a list.\n"
+        f"- Keep each list item on a single line — no multi-line items.\n"
+        f"- Use **bold text** inline for emphasis, not as standalone heading lines.\n"
+        f"- Aim for 150–400 words total. Be direct and concise.\n\n"
+        f"This is the ONLY response format allowed for this turn.\n"
+        f"=========================================================\n\n"
+    )
+
+    system_content = action_override + get_system_prompt()
+    messages: list[dict] = [{"role": "system", "content": system_content}]
+    history = (conv_history or [])[:-1]
+    if history:
+        messages.extend(history[-8:])
+    messages.append({"role": "user", "content": user_turn})
+
+    citations = [r.citation for r in results if r.citation is not None]
+    return None, messages, citations, confidence_warning, action_type
+
+
+# ===========================================================================
 # Self-Check
 # ===========================================================================
 
