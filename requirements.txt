@@ -1,6 +1,9 @@
 # Core LLM client
 openai>=1.25.0
 
+# Web server (src/app.py)
+flask>=3.0.0
+
 # Data validation and schemas
 pydantic>=2.7.0
 

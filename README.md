@@ -51,7 +51,7 @@ Team 3 — MVP implementation.
 
 - Python 3.11
 - pip + venv
-- Valid student bearer token for LLM endpoint
+- Valid API key for the LLM endpoint (OpenAI-compatible)
 - ChromaDB index built (see **Build retrieval index** below)
 
 ## Environment setup
@@ -72,10 +72,14 @@ pip install -r requirements.txt
 3. Configure `.env`:
 
 ```dotenv
-LLM_ENDPOINT=https://rsm-8430-finalproject.bjlkeng.io/v1/chat/completions
-LLM_API_KEY=<your_student_id_token>
-LLM_MODEL=qwen3-30b-a3b-fp8
+LLM_ENDPOINT=https://ark.cn-beijing.volces.com/api/v3/chat/completions
+LLM_API_KEY=<your_api_key>
+LLM_MODEL=deepseek-v4-flash-260425
 ```
+
+The endpoint must be OpenAI-compatible (it is called via the `openai` SDK). Any
+OpenAI-compatible provider works — just set `LLM_ENDPOINT`, `LLM_API_KEY`, and
+`LLM_MODEL` accordingly. Optional: `LLM_TIMEOUT_SECONDS` (default `45`).
 
 ## Build retrieval index
 
