@@ -2362,6 +2362,11 @@ function addMessage(el) {
   msgs.scrollTop = msgs.scrollHeight;
 }
 
+function scrollToBottom() {
+  const msgs = document.getElementById('messages');
+  if (msgs) msgs.scrollTop = msgs.scrollHeight;
+}
+
 function setStatus(state, label) {
   const dot = document.getElementById('sessionDot');
   const lbl = document.getElementById('sessionLabel');
