@@ -3,66 +3,95 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Canada PR Navigator — IRCC Immigration Assistant</title>
+  <title>Canada PR Navigator</title>
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Outfit:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..0" rel="stylesheet" />
   <style>
     /* ── Reset & tokens ──────────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      /* Government of Canada design system palette (Canada.ca / IRCC / CRA) */
-      --navy:      #26374A;   /* GC official header navy */
-      --navy-lt:   #344454;
-      --navy-dk:   #1C2B3A;
-      --red:       #AF3C43;   /* GC muted official red */
-      --red-lt:    #C84B54;
-      --red-dk:    #8B2E34;
-      --gc-blue:   #2B4380;   /* GC link/accent blue */
-      --gc-blue-lt:#3655A0;
+      /* Google Material design language — single blue accent, neutral grays */
+      --g-blue:    #1a73e8;   /* Google primary blue */
+      --g-blue-dk: #1765cc;
+      --g-blue-lt: #4285f4;
+      --g-blue-50: #e8f0fe;   /* tinted blue surface */
+      --g-green:   #1e8e3e;
+      --g-red:     #d93025;
+      --g-yellow:  #f29900;
 
-      /* Neutrals — white dominant like Canada.ca */
-      --bg:        #F5F5F5;
-      --surface:   #FFFFFF;
-      --surface-2: #F9F9F9;
-      --border:    #CCCCCC;
-      --border-lt: #E0E0E0;
-      --ink:       #333333;   /* GC body text */
-      --ink-lt:    #5C6670;   /* GC secondary text */
-      --ink-xs:    #767676;   /* WCAG AA on white */
+      /* Neutrals — Google surface scale */
+      --bg:        #ffffff;
+      --surface:   #ffffff;
+      --surface-2: #f8f9fa;   /* Google light gray surface */
+      --surface-3: #f1f3f4;
+      --border:    #dadce0;   /* Google hairline */
+      --border-lt: #e8eaed;
+      --ink:       #202124;   /* Google primary text */
+      --ink-lt:    #5f6368;   /* Google secondary text */
+      --ink-xs:    #80868b;   /* Google tertiary text */
 
-      /* Legacy aliases kept for backward-compat with existing JS */
-      --forest:    var(--navy);
-      --forest-lt: var(--navy-lt);
-      --forest-dk: var(--navy-dk);
-      --maple:     var(--red);
-      --maple-lt:  var(--red-lt);
-      --cream:     var(--bg);
-      --cream-dk:  #EBEBEB;
-      --white:     #FFFFFF;
-      --teal:      #1A7A6E;
-      --teal-lt:   #22A090;
+      /* Legacy aliases remapped to the Google palette for backward-compat */
+      --navy:      #202124;
+      --navy-lt:   #3c4043;
+      --navy-dk:   #202124;
+      --red:       var(--g-blue);
+      --red-lt:    var(--g-blue-lt);
+      --red-dk:    var(--g-blue-dk);
+      --gc-blue:   var(--g-blue);
+      --gc-blue-lt:var(--g-blue-dk);
+      --forest:    var(--g-blue);
+      --forest-lt: var(--g-blue-lt);
+      --forest-dk: var(--g-blue-dk);
+      --maple:     var(--g-blue);
+      --maple-lt:  var(--g-blue-lt);
+      --cream:     #ffffff;
+      --cream-dk:  #f1f3f4;
+      --white:     #ffffff;
+      --teal:      var(--g-green);
+      --teal-lt:   #34a853;
 
-      --shadow-sm: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.04);
-      --shadow-md: 0 4px 16px rgba(0,0,0,.10), 0 2px 4px rgba(0,0,0,.05);
-      --shadow-lg: 0 16px 40px rgba(0,0,0,.13), 0 4px 10px rgba(0,0,0,.06);
-      --radius:    4px;   /* GC uses sharper corners */
-      --radius-lg: 6px;
-      --radius-sm: 3px;
-      --transition: 160ms ease;
+      /* Google elevation shadows (cool-tinted, single light source) */
+      --shadow-sm: 0 1px 2px 0 rgba(60,64,67,.30), 0 1px 3px 1px rgba(60,64,67,.15);
+      --shadow-md: 0 1px 2px 0 rgba(60,64,67,.30), 0 2px 6px 2px rgba(60,64,67,.15);
+      --shadow-lg: 0 1px 3px 0 rgba(60,64,67,.30), 0 4px 8px 3px rgba(60,64,67,.15);
+      --radius:    12px;
+      --radius-lg: 16px;
+      --radius-sm: 8px;
+      --radius-pill: 999px;
+      --ease:      cubic-bezier(.2,0,0,1);   /* Material standard easing */
+      --transition: 200ms cubic-bezier(.2,0,0,1);
     }
 
     html, body {
       height: 100%;
       background: var(--bg);
       color: var(--ink);
-      font-family: 'Noto Sans', 'Segoe UI', Arial, sans-serif;
+      font-family: 'Roboto', 'Google Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
       font-size: 16px;
-      line-height: 1.65;
+      line-height: 1.6;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* Material Symbols icon helper */
+    .msym {
+      font-family: 'Material Symbols Outlined';
+      font-weight: normal;
+      font-style: normal;
+      line-height: 1;
+      letter-spacing: normal;
+      text-transform: none;
+      display: inline-block;
+      white-space: nowrap;
+      direction: ltr;
+      -webkit-font-feature-settings: 'liga';
+      -webkit-font-smoothing: antialiased;
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      user-select: none;
     }
 
     /* ── Layout ──────────────────────────────────────────────────── */
@@ -74,183 +103,170 @@
 
     /* Left sidebar — profile tracker */
     .sidebar {
-      width: 288px;
+      width: 300px;
       flex-shrink: 0;
-      background: var(--navy-dk);
-      color: var(--white);
+      background: var(--surface-2);
+      color: var(--ink);
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      border-right: 3px solid var(--red);  /* GC accent left border */
+      border-right: 1px solid var(--border-lt);
     }
 
     .sidebar-header {
       padding: 0;
-      border-bottom: 1px solid rgba(255,255,255,.08);
       flex-shrink: 0;
     }
 
-    /* Flag-photo banner at the top of the sidebar */
+    /* Clean wordmark header at the top of the sidebar */
     .sidebar-hero {
       position: relative;
-      height: 96px;
-      overflow: hidden;
-      background: var(--navy-dk);
+      padding: 20px 22px 14px;
     }
-    .sidebar-hero img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      object-position: center 35%;
-      opacity: .55;
-      display: block;
-    }
-    .sidebar-hero-overlay {
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(to bottom, rgba(17,29,53,.0) 0%, rgba(17,29,53,.85) 100%);
-    }
-    .sidebar-hero-content {
-      position: absolute;
-      bottom: 12px;
-      left: 16px;
-      right: 16px;
-    }
+    .sidebar-hero img { display: none; }
+    .sidebar-hero-overlay { display: none; }
+    .sidebar-hero-content { position: static; }
 
     .logo {
       display: flex;
       align-items: center;
-      gap: 8px;
-      margin-bottom: 2px;
+      gap: 10px;
+      margin-bottom: 3px;
     }
 
     .logo-leaf {
-      width: 22px; height: 22px;
-      background: var(--red);
-      clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+      width: 30px; height: 30px;
+      border-radius: 50%;
+      background: var(--g-blue-50);
+      color: var(--g-blue);
+      clip-path: none;
       flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
     }
 
     .logo-text {
-      font-family: 'Outfit', sans-serif;
-      font-size: 15px;
-      font-weight: 700;
-      color: var(--white);
-      letter-spacing: 0;
+      font-family: 'Roboto', sans-serif;
+      font-size: 18px;
+      font-weight: 500;
+      color: var(--ink);
+      letter-spacing: -.01em;
     }
 
     .sidebar-subtitle {
-      font-size: 11px;
-      color: rgba(255,255,255,.50);
-      letter-spacing: 0;
+      font-size: 12px;
+      color: var(--ink-lt);
       font-weight: 400;
+      padding-left: 40px;
     }
 
     .sidebar-body {
       flex: 1;
       overflow-y: auto;
-      padding: 16px 20px;
+      padding: 8px 22px 16px;
     }
 
-    .sidebar-body::-webkit-scrollbar { width: 4px; }
+    .sidebar-body::-webkit-scrollbar { width: 8px; }
     .sidebar-body::-webkit-scrollbar-track { background: transparent; }
-    .sidebar-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,.15); border-radius: 2px; }
+    .sidebar-body::-webkit-scrollbar-thumb { background: #c4c7c5; border-radius: 4px; }
 
     .profile-section-title {
-      font-size: 10px;
+      font-size: 11px;
       text-transform: uppercase;
-      letter-spacing: .09em;
-      font-weight: 600;
-      color: rgba(255,255,255,.28);
+      letter-spacing: .08em;
+      font-weight: 500;
+      color: var(--ink-lt);
       margin-bottom: 10px;
-      margin-top: 20px;
-      padding-bottom: 5px;
-      border-bottom: 1px solid rgba(255,255,255,.06);
+      margin-top: 22px;
+      padding-bottom: 0;
+      border-bottom: none;
     }
     .profile-section-title:first-child { margin-top: 0; }
 
     .sidebar-hint {
       display: flex;
-      gap: 8px;
+      gap: 10px;
       align-items: flex-start;
-      background: rgba(255,255,255,.06);
-      border: 1px solid rgba(255,255,255,.10);
-      border-radius: var(--radius-sm);
-      padding: 10px 12px;
-      margin-bottom: 16px;
-      font-size: 11.5px;
-      color: rgba(255,255,255,.60);
+      background: var(--g-blue-50);
+      border: none;
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      margin-bottom: 18px;
+      font-size: 12.5px;
+      color: #174ea6;
       line-height: 1.55;
     }
-    .sidebar-hint strong { color: rgba(255,255,255,.85); font-weight: 600; }
-    .sidebar-hint-icon { flex-shrink: 0; font-size: 14px; margin-top: 1px; }
+    .sidebar-hint strong { color: #174ea6; font-weight: 500; }
+    .sidebar-hint-icon { flex-shrink: 0; font-size: 18px; margin-top: 0; color: var(--g-blue); }
 
     .field-row {
       display: flex;
       align-items: flex-start;
       gap: 10px;
       padding: 9px 0;
-      border-bottom: 1px solid rgba(255,255,255,.04);
+      border-bottom: 1px solid var(--border-lt);
     }
     .field-row:last-child { border-bottom: none; }
 
     .field-dot {
-      width: 7px; height: 7px;
+      width: 8px; height: 8px;
       border-radius: 50%;
       flex-shrink: 0;
       margin-top: 6px;
       transition: background var(--transition);
     }
-    .field-dot.filled   { background: #3CB371; }
-    .field-dot.missing  { background: rgba(255,255,255,.22); }
+    .field-dot.filled   { background: var(--g-green); }
+    .field-dot.missing  { background: #c4c7c5; }
 
     .field-label {
-      font-size: 12px;
-      font-weight: 500;
-      color: rgba(255,255,255,.55);
+      font-size: 12.5px;
+      font-weight: 400;
+      color: var(--ink-lt);
       margin-bottom: 2px;
     }
 
     .field-value {
-      font-size: 12.5px;
-      color: rgba(255,255,255,.92);
-      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      color: var(--ink);
+      font-weight: 500;
       word-break: break-word;
     }
 
     .field-empty {
-      font-size: 12px;
-      color: rgba(255,255,255,.22);
-      font-style: italic;
+      font-size: 12.5px;
+      color: var(--ink-xs);
+      font-style: normal;
     }
 
     /* Progress bar */
     .progress-wrap {
-      padding: 14px 16px 18px;
-      border-top: 1px solid rgba(255,255,255,.08);
-      background: rgba(0,0,0,.12);
+      padding: 16px 22px 20px;
+      border-top: 1px solid var(--border-lt);
+      background: var(--surface-2);
     }
 
     .progress-label {
       display: flex;
       justify-content: space-between;
-      font-size: 11px;
-      color: rgba(255,255,255,.45);
-      margin-bottom: 6px;
+      font-size: 12px;
+      color: var(--ink-lt);
+      margin-bottom: 8px;
     }
 
     .progress-bar {
-      height: 4px;
-      background: rgba(255,255,255,.12);
-      border-radius: 2px;
+      height: 6px;
+      background: var(--border-lt);
+      border-radius: var(--radius-pill);
       overflow: hidden;
     }
 
     .progress-fill {
       height: 100%;
-      background: #3CB371;  /* GC-appropriate green */
-      border-radius: 2px;
-      transition: width .4s ease;
+      background: var(--g-blue);
+      border-radius: var(--radius-pill);
+      transition: width .4s var(--ease);
     }
 
     /* ── Main chat area ──────────────────────────────────────────── */
@@ -263,10 +279,10 @@
     }
 
     .chat-header {
-      padding: 0 28px;
-      height: 56px;
-      background: var(--navy);
-      border-bottom: 4px solid var(--red);  /* GC signature red bar */
+      padding: 0 24px;
+      height: 64px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border-lt);
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -274,66 +290,69 @@
     }
 
     .chat-title {
-      font-family: 'Outfit', sans-serif;
-      font-size: 17px;
-      font-weight: 600;
-      color: var(--white);
-      letter-spacing: -0.02em;
+      font-family: 'Roboto', sans-serif;
+      font-size: 20px;
+      font-weight: 400;
+      color: var(--ink);
+      letter-spacing: -0.01em;
       display: flex;
       align-items: center;
       gap: 10px;
     }
-    .chat-title-flag {
-      width: 18px; height: 18px;
-      background: var(--red);
-      clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
-      flex-shrink: 0;
-    }
+    .chat-title-flag { display: none; }
     .chat-title-sub {
-      font-family: 'Inter', sans-serif;
-      font-size: 11.5px;
+      font-family: 'Roboto', sans-serif;
+      font-size: 12.5px;
       font-weight: 400;
-      color: rgba(255,255,255,.38);
-      letter-spacing: .01em;
-      margin-left: 4px;
+      color: var(--ink-lt);
+      letter-spacing: 0;
+      margin-left: 6px;
     }
 
     .session-badge {
       display: flex;
       align-items: center;
-      gap: 6px;
-      font-size: 11px;
-      color: rgba(255,255,255,.40);
-      font-family: 'JetBrains Mono', monospace;
+      gap: 7px;
+      font-size: 12px;
+      color: var(--ink-lt);
+      font-family: 'Roboto', sans-serif;
+      padding: 6px 12px;
+      border-radius: var(--radius-pill);
+      background: var(--surface-2);
     }
 
     .session-dot {
-      width: 7px; height: 7px;
+      width: 8px; height: 8px;
       border-radius: 50%;
-      background: #4ADE80;
+      background: var(--g-green);
     }
 
     /* Messages */
     .messages {
       flex: 1;
       overflow-y: auto;
-      padding: 28px 40px;
+      padding: 32px 24px;
       display: flex;
       flex-direction: column;
-      gap: 24px;
+      gap: 28px;
       max-width: 100%;
       background: var(--surface);
     }
 
-    .messages::-webkit-scrollbar { width: 6px; }
+    .messages::-webkit-scrollbar { width: 10px; }
     .messages::-webkit-scrollbar-track { background: transparent; }
-    .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    .messages::-webkit-scrollbar-thumb { background: #dadce0; border-radius: 5px; border: 2px solid var(--surface); }
+    .messages::-webkit-scrollbar-thumb:hover { background: #c4c7c5; }
 
+    /* Centered conversation column, like a Google content column */
     .msg-row {
       display: flex;
-      gap: 12px;
+      gap: 14px;
       align-items: flex-start;
-      animation: msgIn .25s ease both;
+      animation: msgIn .3s var(--ease) both;
+      width: 100%;
+      max-width: 860px;
+      margin: 0 auto;
     }
 
     @keyframes msgIn {
@@ -344,24 +363,26 @@
     .msg-row.user { flex-direction: row-reverse; }
 
     .msg-avatar {
-      width: 32px; height: 32px;
+      width: 36px; height: 36px;
       border-radius: 50%;
       flex-shrink: 0;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 13px;
-      font-weight: 600;
+      font-size: 20px;
+      font-weight: 500;
     }
 
     .msg-avatar.agent {
-      background: var(--forest);
-      color: var(--white);
+      background: var(--g-blue-50);
+      color: var(--g-blue);
     }
+    .msg-avatar.agent .msym { font-size: 20px; }
 
     .msg-avatar.user-av {
-      background: var(--cream-dk);
+      background: var(--surface-3);
       color: var(--ink-lt);
+      font-size: 15px;
     }
 
     .msg-body { max-width: 720px; }
@@ -376,25 +397,23 @@
 
     .msg-bubble.agent-bubble {
       background: var(--surface-2);
-      border: 1px solid var(--border);
-      border-left: 3px solid var(--navy);
-      border-top-left-radius: 0;
+      border: none;
+      border-radius: 4px var(--radius-lg) var(--radius-lg) var(--radius-lg);
       box-shadow: none;
       color: var(--ink);
     }
 
     .msg-bubble.user-bubble {
-      background: var(--navy);
-      color: var(--white);
-      border-top-right-radius: 2px;
+      background: var(--g-blue);
+      color: #fff;
+      border-radius: var(--radius-lg) var(--radius-lg) 4px var(--radius-lg);
     }
 
     /* ── Answer card ──────────────────────────────────────────────── */
     .answer-card {
       background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      border-left: 4px solid var(--gc-blue);  /* GC content border accent */
+      border: 1px solid var(--border-lt);
+      border-radius: var(--radius-lg);
       box-shadow: var(--shadow-sm);
       overflow: hidden;
     }
@@ -403,9 +422,9 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      padding: 10px 16px 9px;
-      background: #F0F4F9;
-      border-bottom: 1px solid var(--border);
+      padding: 12px 18px 11px;
+      background: var(--surface-2);
+      border-bottom: 1px solid var(--border-lt);
       flex-wrap: wrap;
     }
 
@@ -413,24 +432,25 @@
       display: inline-flex;
       align-items: center;
       gap: 5px;
-      padding: 3px 9px;
-      border-radius: 999px;
+      padding: 4px 11px;
+      border-radius: var(--radius-pill);
       font-size: 11px;
-      font-weight: 600;
-      letter-spacing: .03em;
-      text-transform: uppercase;
+      font-weight: 500;
+      letter-spacing: .02em;
+      text-transform: none;
+      border: none;
     }
 
-    .badge { font-family: 'Noto Sans', sans-serif; font-size: 10.5px; }
-    .badge-action1 { background: #E8EDFB; color: #2651B2; border: 1px solid #C5D1F5; }
-    .badge-action2 { background: #E4F4EC; color: #176B42; border: 1px solid #B3DFC6; }
-    .badge-action3 { background: #FDF3E3; color: #8A5210; border: 1px solid #F3D49A; }
-    .badge-action4 { background: #EEE9FB; color: #5527A8; border: 1px solid #D0BEF5; }
-    .badge-l1      { background: #E4F4EC; color: #176B42; border: 1px solid #B3DFC6; }
-    .badge-l2      { background: #FDF3E3; color: #8A5210; border: 1px solid #F3D49A; }
-    .badge-l3      { background: #FDECEA; color: #8B1A1A; border: 1px solid #F3BCB8; }
-    .badge-warn    { background: #FEF9E0; color: #7A5500; border: 1px solid #EDD87A; }
-    .badge-ircc    { background: var(--navy); color: #fff; font-size: 9.5px; letter-spacing:.06em; }
+    .badge { font-family: 'Roboto', sans-serif; font-size: 11.5px; }
+    .badge-action1 { background: var(--g-blue-50); color: #1967d2; }
+    .badge-action2 { background: #e6f4ea; color: #188038; }
+    .badge-action3 { background: #fef7e0; color: #b06000; }
+    .badge-action4 { background: #f3e8fd; color: #8430ce; }
+    .badge-l1      { background: #e6f4ea; color: #188038; }
+    .badge-l2      { background: #fef7e0; color: #b06000; }
+    .badge-l3      { background: #fce8e6; color: #c5221f; }
+    .badge-warn    { background: #fef7e0; color: #b06000; }
+    .badge-ircc    { background: var(--surface-3); color: var(--ink-lt); font-size: 11px; letter-spacing:.02em; }
 
     .answer-body {
       padding: 18px 22px;
@@ -592,62 +612,70 @@
 
     /* ── Input area ──────────────────────────────────────────────── */
     .input-area {
-      padding: 14px 28px 18px;
+      padding: 12px 24px 22px;
       background: var(--surface);
-      border-top: 2px solid var(--border);
+      border-top: 1px solid var(--border-lt);
       flex-shrink: 0;
     }
 
     .input-row {
       display: flex;
-      gap: 10px;
+      gap: 8px;
       align-items: flex-end;
+      max-width: 860px;
+      margin: 0 auto;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 26px;
+      padding: 5px 6px 5px 8px;
+      transition: box-shadow var(--transition), border-color var(--transition);
+    }
+    .input-row:focus-within {
+      border-color: transparent;
+      box-shadow: 0 1px 6px rgba(32,33,36,.28);
     }
 
     .input-box {
       flex: 1;
       resize: none;
-      border: 2px solid var(--border);
-      border-radius: var(--radius-sm);
-      padding: 10px 14px;
-      font-family: 'Noto Sans', sans-serif;
+      border: none;
+      border-radius: 0;
+      padding: 11px 8px 11px 12px;
+      font-family: 'Roboto', sans-serif;
       font-size: 16px;
       color: var(--ink);
-      background: var(--surface);
+      background: transparent;
       outline: none;
-      min-height: 46px;
-      max-height: 140px;
-      line-height: 1.6;
-      transition: border-color var(--transition), box-shadow var(--transition);
+      min-height: 44px;
+      max-height: 160px;
+      line-height: 1.5;
     }
-    .input-box:focus {
-      border-color: var(--gc-blue);
-      box-shadow: 0 0 0 3px rgba(43,67,128,.15);
-      background: var(--surface);
-    }
+    .input-box:focus { box-shadow: none; }
     .input-box::placeholder { color: var(--ink-xs); }
 
     .send-btn {
-      width: 46px; height: 46px;
+      width: 40px; height: 40px;
       flex-shrink: 0;
-      background: var(--gc-blue);
-      color: var(--white);
+      background: var(--g-blue);
+      color: #fff;
       border: none;
-      border-radius: var(--radius-sm);
+      border-radius: 50%;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: background var(--transition), transform var(--transition);
+      transition: background var(--transition), transform var(--transition), box-shadow var(--transition);
     }
-    .send-btn:hover:not(:disabled) { background: var(--gc-blue-lt); }
-    .send-btn:active:not(:disabled) { transform: scale(.97); }
-    .send-btn:disabled { opacity: .4; cursor: not-allowed; }
+    .send-btn:hover:not(:disabled) { background: var(--g-blue-dk); box-shadow: var(--shadow-sm); }
+    .send-btn:active:not(:disabled) { transform: scale(.94); }
+    .send-btn:disabled { background: var(--surface-3); color: var(--ink-xs); cursor: not-allowed; }
 
     .input-hint {
       font-size: 12px;
       color: var(--ink-xs);
-      margin-top: 8px;
+      margin: 8px auto 0;
+      max-width: 860px;
+      text-align: center;
     }
 
     /* Quick action chips */
@@ -655,26 +683,28 @@
       display: flex;
       gap: 8px;
       flex-wrap: wrap;
-      margin-bottom: 10px;
+      margin: 0 auto 12px;
+      max-width: 860px;
+      justify-content: center;
     }
 
     .quick-chip {
-      padding: 6px 14px;
-      border: 1.5px solid var(--gc-blue);
-      border-radius: var(--radius-sm);
+      padding: 8px 16px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-pill);
       font-size: 13px;
-      color: var(--gc-blue);
+      color: var(--ink-lt);
       background: var(--surface);
       cursor: pointer;
       transition: all var(--transition);
-      font-family: 'Noto Sans', sans-serif;
+      font-family: 'Roboto', sans-serif;
       font-weight: 500;
       text-decoration: none;
     }
     .quick-chip:hover {
-      background: var(--gc-blue);
-      color: var(--white);
-      border-color: var(--gc-blue);
+      background: var(--g-blue-50);
+      color: var(--g-blue-dk);
+      border-color: var(--g-blue-50);
     }
 
     /* ── Welcome screen ──────────────────────────────────────────── */
@@ -683,80 +713,53 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: flex-start;
+      justify-content: center;
       text-align: center;
-      padding: 0 24px 40px;
+      padding: 48px 24px;
       gap: 0;
       overflow-y: auto;
+      max-width: 760px;
+      margin: 0 auto;
     }
 
-    /* Hero banner fills the top of the welcome screen */
-    .welcome-hero {
-      width: 100%;
-      position: relative;
-      height: 240px;
-      overflow: hidden;
-      flex-shrink: 0;
-      margin-bottom: 32px;
-    }
-    .welcome-hero img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      object-position: center 40%;
-      display: block;
-    }
-    .welcome-hero-overlay {
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(
-        to bottom,
-        rgba(38,55,74,.08) 0%,
-        rgba(38,55,74,.65) 65%,
-        rgba(28,43,58,.90) 100%
-      );
-    }
-    .welcome-hero-text {
-      position: absolute;
-      bottom: 28px;
-      left: 0; right: 0;
-      padding: 0 32px;
-    }
-    .welcome-hero-eyebrow {
-      font-size: 10.5px;
-      font-weight: 700;
-      letter-spacing: .12em;
-      text-transform: uppercase;
-      color: rgba(255,255,255,.55);
-      margin-bottom: 8px;
+    /* Legacy hero banner removed in Google redesign */
+    .welcome-hero,
+    .welcome-hero img,
+    .welcome-hero-overlay,
+    .welcome-hero-text,
+    .welcome-hero-eyebrow,
+    .welcome-hero-eyebrow-leaf { display: none; }
+
+    .welcome-icon {
+      width: 64px; height: 64px;
+      border-radius: 50%;
+      background: var(--g-blue-50);
+      color: var(--g-blue);
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 6px;
+      margin-bottom: 24px;
     }
-    .welcome-hero-eyebrow-leaf {
-      width: 12px; height: 12px;
-      background: var(--red);
-      clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
-      display: inline-block;
-    }
+    .welcome-icon .msym { font-size: 32px; }
+    .welcome-icon svg { stroke: var(--g-blue); width: 30px; height: 30px; }
 
     .welcome-title {
-      font-family: 'Outfit', sans-serif;
-      font-size: 26px;
-      font-weight: 700;
-      color: var(--white);
-      letter-spacing: -0.01em;
-      line-height: 1.22;
-      text-shadow: 0 1px 8px rgba(0,0,0,.4);
+      font-family: 'Roboto', 'Google Sans', sans-serif;
+      font-size: 32px;
+      font-weight: 400;
+      color: var(--ink);
+      letter-spacing: -0.02em;
+      line-height: 1.25;
+      text-shadow: none;
+      margin-bottom: 12px;
     }
 
     .welcome-sub {
-      font-size: 15px;
+      font-size: 16px;
       color: var(--ink-lt);
-      max-width: 500px;
-      line-height: 1.7;
-      margin-bottom: 24px;
+      max-width: 520px;
+      line-height: 1.6;
+      margin-bottom: 32px;
       text-wrap: pretty;
     }
 
@@ -770,99 +773,95 @@
     }
 
     .welcome-btn {
-      padding: 10px 22px;
-      border-radius: var(--radius);
-      font-size: 13.5px;
-      font-family: 'Inter', sans-serif;
-      font-weight: 600;
+      padding: 11px 28px;
+      border-radius: var(--radius-pill);
+      font-size: 14px;
+      font-family: 'Roboto', sans-serif;
+      font-weight: 500;
       cursor: pointer;
       transition: all var(--transition);
-      letter-spacing: .01em;
+      letter-spacing: 0;
+      border: 1px solid transparent;
     }
 
     .welcome-btn.primary {
-      background: var(--gc-blue);
-      color: var(--white);
-      border: 2px solid var(--gc-blue);
+      background: var(--g-blue);
+      color: #fff;
+      border: 1px solid var(--g-blue);
       box-shadow: none;
     }
-    .welcome-btn.primary:hover { background: var(--gc-blue-lt); border-color: var(--gc-blue-lt); }
+    .welcome-btn.primary:hover { background: var(--g-blue-dk); border-color: var(--g-blue-dk); box-shadow: var(--shadow-sm); }
     .welcome-btn.primary:active { transform: scale(.98); }
 
     .welcome-btn.secondary {
-      background: transparent;
-      color: var(--navy);
-      border: 2px solid var(--navy);
+      background: var(--surface);
+      color: var(--g-blue);
+      border: 1px solid var(--border);
     }
-    .welcome-btn.secondary:hover { background: var(--navy); color: var(--white); }
+    .welcome-btn.secondary:hover { background: var(--g-blue-50); border-color: var(--g-blue-50); }
 
     .action-cards {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
       gap: 12px;
-      max-width: 540px;
+      max-width: 560px;
       width: 100%;
       margin-bottom: 28px;
     }
 
     .action-card {
-      padding: 16px 18px;
+      padding: 18px 20px;
       background: var(--surface);
-      border: 1px solid var(--border);
-      border-top: 3px solid var(--navy);
-      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-lt);
+      border-radius: var(--radius-lg);
       text-align: left;
       cursor: pointer;
       transition: all var(--transition);
-      box-shadow: var(--shadow-sm);
+      box-shadow: none;
       position: relative;
       overflow: hidden;
     }
-    .action-card::before {
-      content: '';
-      position: absolute;
-      top: 0; left: 0;
-      width: 3px;
-      height: 100%;
-      background: var(--navy);
-      opacity: 0;
-      transition: opacity var(--transition);
-    }
-    .action-card:hover  { border-color: var(--navy); box-shadow: var(--shadow-md); transform: translateY(-1px); background: #F8FAFD; }
-    .action-card:active  { transform: scale(.98); box-shadow: none; }
+    .action-card::before { content: none; }
+    .action-card:hover  { border-color: var(--border); box-shadow: var(--shadow-md); transform: translateY(-1px); background: var(--surface); }
+    .action-card:active  { transform: scale(.99); box-shadow: var(--shadow-sm); }
     .action-card.loading { opacity: .6; pointer-events: none; }
     .action-card.loading .action-card-title::after {
       content: ' …';
       animation: dotPulse .9s infinite;
     }
     @keyframes dotPulse { 0%,100%{opacity:1;} 50%{opacity:.3;} }
-    .action-card:hover::before { opacity: 1; }
 
     .action-card-emoji {
-      font-size: 22px;
-      margin-bottom: 8px;
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      background: var(--g-blue-50);
+      color: var(--g-blue);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 12px;
       line-height: 1;
     }
+    .action-card-emoji .msym { font-size: 22px; }
 
     .welcome-or-text {
-      font-size: 12px;
+      font-size: 13px;
       color: var(--ink-xs);
-      margin: 0 0 10px;
-      letter-spacing: .02em;
+      margin: 0 0 16px;
+      letter-spacing: 0;
     }
 
     .action-card-title {
-      font-family: 'Noto Sans', sans-serif;
-      font-weight: 600;
-      font-size: 14px;
-      color: var(--gc-blue);
+      font-family: 'Roboto', sans-serif;
+      font-weight: 500;
+      font-size: 15px;
+      color: var(--ink);
       margin-bottom: 5px;
-      text-decoration: underline;
-      text-underline-offset: 2px;
+      text-decoration: none;
     }
 
     .action-card-desc {
-      font-size: 12.5px;
+      font-size: 13px;
       color: var(--ink-lt);
       line-height: 1.5;
     }
@@ -907,14 +906,13 @@
     .status-banner.ok    { background:#F0FDF4; border-color:#BBF7D0; color:#14532D; }
     .status-banner a { color:inherit; font-weight:600; }
     .restart-btn {
-      padding:5px 12px; background:transparent; border:1px solid rgba(255,255,255,.22);
-      border-radius:var(--radius-sm); font-size:11.5px; color:rgba(255,255,255,.65);
-      cursor:pointer; font-family:'Inter',sans-serif; transition:all var(--transition);
+      display:inline-flex; align-items:center; gap:6px;
+      padding:7px 14px; background:var(--surface); border:1px solid var(--border);
+      border-radius:var(--radius-pill); font-size:12.5px; font-weight:500; color:var(--ink-lt);
+      cursor:pointer; font-family:'Roboto',sans-serif; transition:all var(--transition);
     }
-    .restart-btn {
-      font-family: 'Noto Sans', sans-serif;
-    }
-    .restart-btn:hover { border-color:rgba(255,255,255,.55); color:var(--white); }
+    .restart-btn .msym { font-size:16px; }
+    .restart-btn:hover { background:var(--surface-2); border-color:var(--border); color:var(--ink); }
     .collecting-card {
       background:var(--surface); border:1px solid var(--border);
       border-left: 3px solid var(--gc-blue);
@@ -940,46 +938,46 @@
     .pf-row {
       display: flex;
       flex-direction: column;
-      gap: 3px;
-      padding: 5px 0;
-      border-bottom: 1px solid rgba(255,255,255,.05);
+      gap: 4px;
+      padding: 6px 0;
+      border-bottom: none;
     }
     .pf-row:last-child { border-bottom: none; }
 
     .pf-label {
-      font-size: 10.5px;
-      font-weight: 500;
-      color: rgba(255,255,255,.40);
-      text-transform: uppercase;
-      letter-spacing: .06em;
+      font-size: 12px;
+      font-weight: 400;
+      color: var(--ink-lt);
+      text-transform: none;
+      letter-spacing: 0;
     }
 
     .pf-select, .pf-input {
-      background: rgba(255,255,255,.06);
-      border: 1px solid rgba(255,255,255,.10);
-      border-radius: 6px;
-      color: rgba(255,255,255,.90);
-      font-family: 'Inter', sans-serif;
-      font-size: 12.5px;
-      padding: 6px 9px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--ink);
+      font-family: 'Roboto', sans-serif;
+      font-size: 13.5px;
+      padding: 9px 11px;
       width: 100%;
       outline: none;
-      transition: border-color var(--transition), background var(--transition);
+      transition: border-color var(--transition), box-shadow var(--transition);
       appearance: none;
       -webkit-appearance: none;
     }
-    .pf-select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='rgba(255,255,255,.35)'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 8px center; padding-right: 24px; }
-    .pf-select option { background: var(--navy-dk); color: var(--white); }
+    .pf-select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%235f6368'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 26px; }
+    .pf-select option { background: var(--surface); color: var(--ink); }
     .pf-select:focus, .pf-input:focus {
-      border-color: rgba(59,179,113,.55);
-      background: rgba(255,255,255,.11);
+      border-color: var(--g-blue);
+      box-shadow: 0 0 0 1px var(--g-blue);
       outline: none;
     }
-    .pf-input::placeholder { color: rgba(255,255,255,.25); }
+    .pf-input::placeholder { color: var(--ink-xs); }
     .pf-input-inline { width: calc(100% - 28px); }
     .pf-unit {
-      font-size: 11px;
-      color: rgba(255,255,255,.35);
+      font-size: 12px;
+      color: var(--ink-lt);
       align-self: center;
       margin-left: 4px;
     }
@@ -992,7 +990,7 @@
 
     .pf-save-indicator {
       font-size: 11px;
-      color: #4ADE80;
+      color: var(--g-green);
       text-align: right;
       padding: 4px 0 0;
       height: 16px;
@@ -1011,19 +1009,20 @@
     .pf-clear-btn {
       display: block;
       width: 100%;
-      margin-top: 10px;
-      padding: 6px;
+      margin-top: 14px;
+      padding: 8px;
       background: transparent;
-      border: 1px solid rgba(255,255,255,.15);
-      border-radius: 5px;
-      color: rgba(255,255,255,.45);
-      font-size: 11.5px;
-      font-family: 'DM Sans', sans-serif;
+      border: none;
+      border-radius: var(--radius-pill);
+      color: var(--g-blue);
+      font-size: 13px;
+      font-weight: 500;
+      font-family: 'Roboto', sans-serif;
       cursor: pointer;
-      transition: all var(--transition);
+      transition: background var(--transition);
       text-align: center;
     }
-    .pf-clear-btn:hover { border-color: var(--maple-lt); color: var(--maple-lt); }
+    .pf-clear-btn:hover { background: var(--g-blue-50); }
 
     /* ── Pathway overlay panel ──────────────────────────────────── */
     .pathway-overlay {
@@ -1329,10 +1328,10 @@
         <div class="sidebar-hero-overlay"></div>
         <div class="sidebar-hero-content">
           <div class="logo">
-            <div class="logo-leaf"></div>
+            <div class="logo-leaf"><span class="msym">explore</span></div>
             <span class="logo-text">PR Navigator</span>
           </div>
-          <div class="sidebar-subtitle">Canada Immigration Assistant</div>
+          <div class="sidebar-subtitle">Canada Immigration Guide</div>
         </div>
       </div>
     </div>
@@ -1340,7 +1339,7 @@
     <div class="sidebar-body" id="profilePanel">
 
       <div class="sidebar-hint">
-        <span class="sidebar-hint-icon">💡</span>
+        <span class="sidebar-hint-icon msym">lightbulb</span>
         <span>Fill in what you know — answers become more accurate as your profile grows. You can also just <strong>chat below</strong> and we'll collect your details naturally.</span>
       </div>
 
@@ -1558,11 +1557,11 @@
       <div class="chat-title">
         <div class="chat-title-flag"></div>
         Canada PR Navigator
-        <span class="chat-title-sub">Powered by IRCC &amp; OINP Official Sources</span>
+        <span class="chat-title-sub">IRCC &amp; OINP official sources</span>
       </div>
       <div style="display:flex;align-items:center;gap:10px;">
-        <button class="restart-btn" onclick="openPathwayPanel()">&#128506; Pathway Map</button>
-        <button class="restart-btn" id="restartBtn" onclick="restartSession()" style="display:none;">&#8635; New Chat</button>
+        <button class="restart-btn" onclick="openPathwayPanel()"><span class="msym">map</span> Pathway Map</button>
+        <button class="restart-btn" id="restartBtn" onclick="restartSession()" style="display:none;"><span class="msym">add</span> New Chat</button>
         <div class="session-badge" id="sessionBadge">
           <div class="session-dot" id="sessionDot" style="background:rgba(255,255,255,.2);"></div>
           <span id="sessionLabel">Not connected</span>
@@ -1570,7 +1569,7 @@
       </div>
     </div>
     <div id="statusBanner" style="display:none;" class="status-banner warn">
-      <span>&#9888;</span>
+      <span class="msym" id="statusBannerIcon" style="font-size:18px;">warning</span>
       <span id="statusBannerText">Checking retrieval index&#8230;</span>
     </div>
 
@@ -1579,33 +1578,33 @@
       <!-- Welcome screen (shown before session starts) -->
       <div class="welcome" id="welcomeScreen">
         <div class="welcome-icon">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
             <circle cx="12" cy="10" r="3"/>
           </svg>
         </div>
         <h1 class="welcome-title">Your path to<br>Canadian permanent residence</h1>
         <p class="welcome-sub">
-          I'll guide you through your immigration options using the latest official IRCC and OINP policies — with full citations for every answer.
+          Get clear, well-cited answers about your immigration options, drawn from the latest official IRCC and OINP policies.
         </p>
         <div class="action-cards">
           <div class="action-card" onclick="showPathwayMapNow()">
-            <div class="action-card-emoji">🗺️</div>
+            <div class="action-card-emoji"><span class="msym">map</span></div>
             <div class="action-card-title">See all PR pathways</div>
             <div class="action-card-desc">Visual map of every federal & provincial route to permanent residence</div>
           </div>
           <div class="action-card" onclick="startWithPrompt('Which immigration programs am I eligible for based on my background?', this)">
-            <div class="action-card-emoji">✅</div>
+            <div class="action-card-emoji"><span class="msym">checklist</span></div>
             <div class="action-card-title">What programs can I apply to?</div>
             <div class="action-card-desc">Find out which PR programs match your education, work, and language profile</div>
           </div>
           <div class="action-card" onclick="startWithPrompt('What is my CRS score and how can I improve it?', this)">
-            <div class="action-card-emoji">📊</div>
+            <div class="action-card-emoji"><span class="msym">calculate</span></div>
             <div class="action-card-title">Calculate my CRS score</div>
             <div class="action-card-desc">Estimate your Express Entry points and see how to improve your ranking</div>
           </div>
           <div class="action-card" onclick="startWithPrompt('What documents do I need to apply for Canadian permanent residence?', this)">
-            <div class="action-card-emoji">📋</div>
+            <div class="action-card-emoji"><span class="msym">description</span></div>
             <div class="action-card-title">What documents do I need?</div>
             <div class="action-card-desc">Get a step-by-step list of required documents for your application</div>
           </div>
@@ -1801,7 +1800,7 @@ async function sendMessage() {
     const row = document.createElement('div');
     row.className = 'msg-row stream-row';
     row.innerHTML = `
-      <div class="msg-avatar agent">🍁</div>
+      <div class="msg-avatar agent"><span class="msym">explore</span></div>
       <div class="msg-body" style="max-width:720px;width:100%;">
         <div class="msg-bubble agent-bubble stream-bubble">
           <span class="stream-content"></span><span class="stream-cursor">▋</span>
@@ -1894,7 +1893,7 @@ function appendUserMessage(text) {
   const row = document.createElement('div');
   row.className = 'msg-row user';
   row.innerHTML = `
-    <div class="msg-avatar user-av">You</div>
+    <div class="msg-avatar user-av"><span class="msym">person</span></div>
     <div class="msg-body">
       <div class="msg-bubble user-bubble">${escHtml(text)}</div>
     </div>`;
@@ -1905,7 +1904,7 @@ function appendAgentMessage(text) {
   const row = document.createElement('div');
   row.className = 'msg-row';
   row.innerHTML = `
-    <div class="msg-avatar agent">🍁</div>
+    <div class="msg-avatar agent"><span class="msym">explore</span></div>
     <div class="msg-body">
       <div class="msg-bubble agent-bubble">${escHtml(text)}</div>
     </div>`;
@@ -1919,7 +1918,7 @@ function appendAnswer(data) {
   const metaBadges = buildMetaBadges(data);
   const citHtml    = buildCitations(data.citations || []);
   const warnHtml   = data.confidence_warning
-    ? `<div class="conf-warn">⚠️ ${escHtml(data.confidence_warning)}</div>`
+    ? `<div class="conf-warn"><span class="msym" style="font-size:16px;vertical-align:-3px;">info</span> ${escHtml(data.confidence_warning)}</div>`
     : '';
   const retryHtml  = (data.retry_count > 0)
     ? `<div class="retry-info">Retrieval retry used (${data.retry_count}/1)</div>`
@@ -1930,7 +1929,7 @@ function appendAnswer(data) {
     ? `<div class="inline-map-card" id="card-${svgId}">
         <div class="inline-map-header" onclick="toggleInlineMap(this,'${svgId}')">
           <div class="inline-map-header-left">
-            <span class="inline-map-icon">🗺</span>
+            <span class="inline-map-icon msym">map</span>
             <span class="inline-map-title">Canada PR Pathway Map</span>
             <span class="inline-map-badge">Interactive</span>
           </div>
@@ -1950,7 +1949,7 @@ function appendAnswer(data) {
     : '';
 
   row.innerHTML = `
-    <div class="msg-avatar agent">🍁</div>
+    <div class="msg-avatar agent"><span class="msym">explore</span></div>
     <div class="msg-body" style="max-width:720px;width:100%;">
       <div class="answer-card">
         <div class="answer-meta">${metaBadges}</div>
@@ -1972,7 +1971,7 @@ function appendError(msg, opts) {
     ? `<button class="error-retry-btn" onclick="retryLastMessage(this)">↻ Try again</button>`
     : '';
   row.innerHTML = `
-    <div class="msg-avatar agent" style="background:var(--maple);">!</div>
+    <div class="msg-avatar agent" style="background:#fce8e6;color:#c5221f;"><span class="msym">priority_high</span></div>
     <div class="msg-body">
       <div class="error-bubble">${escHtml(msg)}${retryBtn}</div>
     </div>`;
@@ -1995,7 +1994,7 @@ function buildMetaBadges(data) {
   let html = '';
 
   /* Always show IRCC source badge */
-  html += `<span class="badge badge-ircc">🍁 IRCC / OINP</span>`;
+  html += `<span class="badge badge-ircc"><span class="msym" style="font-size:13px;vertical-align:-2px;">verified</span> IRCC / OINP</span>`;
 
   /* Action type — user-readable label */
   if (data.action_type) {
@@ -2005,13 +2004,13 @@ function buildMetaBadges(data) {
 
   /* L3 only: show a visible caution (not the code name) */
   if (data.risk_level === 'L3') {
-    html += `<span class="badge badge-l3">⚠️ Professional advice recommended</span>`;
+    html += `<span class="badge badge-l3"><span class="msym" style="font-size:13px;vertical-align:-2px;">info</span> Professional advice recommended</span>`;
   }
 
   /* Citation count — useful to users, not jargon */
   const cCount = (data.citations || []).length;
   if (cCount > 0) {
-    html += `<span class="badge" style="background:#F0F4F9;color:var(--ink-lt);border:1px solid var(--border);">📎 ${cCount} source${cCount > 1 ? 's' : ''}</span>`;
+    html += `<span class="badge" style="background:var(--surface-3);color:var(--ink-lt);"><span class="msym" style="font-size:13px;vertical-align:-2px;">link</span> ${cCount} source${cCount > 1 ? 's' : ''}</span>`;
   }
 
   return html;
@@ -2331,7 +2330,7 @@ function showTyping() {
   row.className = 'msg-row';
   row.id = 'typing';
   row.innerHTML = `
-    <div class="msg-avatar agent">🍁</div>
+    <div class="msg-avatar agent"><span class="msym">explore</span></div>
     <div class="msg-body">
       <div class="typing-indicator">
         <div class="typing-dot"></div>
@@ -2411,7 +2410,7 @@ function appendGreeting(text) {
   const row = document.createElement('div');
   row.className = 'msg-row';
   row.innerHTML = `
-    <div class="msg-avatar agent">&#127809;</div>
+    <div class="msg-avatar agent"><span class="msym">explore</span></div>
     <div class="msg-body" style="max-width:680px;">
       <div class="msg-bubble agent-bubble" style="border-left:3px solid var(--forest-lt);">
         ${escHtml(text)}
@@ -2433,7 +2432,7 @@ function appendCollectingCard(text, data) {
   const row = document.createElement('div');
   row.className = 'msg-row';
   row.innerHTML = `
-    <div class="msg-avatar agent">&#127809;</div>
+    <div class="msg-avatar agent"><span class="msym">explore</span></div>
     <div class="msg-body" style="max-width:680px;width:100%;">
       <div class="collecting-card">
         <div class="collecting-header">
@@ -2443,7 +2442,7 @@ function appendCollectingCard(text, data) {
         <div class="collecting-body">${escHtml(text)}</div>
       </div>
       <div style="font-size:11.5px;color:var(--ink-xs);margin-top:6px;padding-left:2px;">
-        💡 <strong>Tip:</strong> Fill in your profile directly using the form on the left — no back-and-forth needed.
+        <span class="msym" style="font-size:14px;vertical-align:-2px;">lightbulb</span> <strong>Tip:</strong> Fill in your profile directly using the form on the left — no back-and-forth needed.
       </div>
     </div>`;
   addMessage(row);
@@ -2454,7 +2453,7 @@ function appendConnectError() {
   const row = document.createElement('div');
   row.className = 'msg-row';
   row.innerHTML = `
-    <div class="msg-avatar agent" style="background:var(--maple);">!</div>
+    <div class="msg-avatar agent" style="background:#fce8e6;color:#c5221f;"><span class="msym">priority_high</span></div>
     <div class="msg-body">
       <div class="error-bubble">
         <strong>Could not connect to the server.</strong><br><br>
@@ -2502,13 +2501,16 @@ async function checkStatus() {
     const banner = document.getElementById('statusBanner');
     const text   = document.getElementById('statusBannerText');
 
+    const icon = document.getElementById('statusBannerIcon');
     if (data.index_ready) {
       banner.className  = 'status-banner ok';
-      text.textContent  = `✓ Retrieval index ready — ${data.doc_count} policy chunks loaded.`;
+      if (icon) icon.textContent = 'check_circle';
+      text.textContent  = `Retrieval index ready — ${data.doc_count} policy chunks loaded.`;
       banner.style.display = 'flex';
       setTimeout(() => { banner.style.display = 'none'; }, 4000);
     } else {
       banner.className     = 'status-banner warn';
+      if (icon) icon.textContent = 'warning';
       text.textContent     = data.message;
       banner.style.display = 'flex';
     }
