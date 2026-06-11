@@ -65,6 +65,60 @@ def _tokenize(text: str) -> list[str]:
     return re.findall(r"[a-z0-9]+", text.lower())
 
 
+# ---------------------------------------------------------------------------
+# Query expansion — immigration abbreviation / synonym normalization
+# ---------------------------------------------------------------------------
+# Maps common shorthand to the canonical terms that appear in the policy
+# corpus, improving BM25 recall for users who type abbreviations.
+_QUERY_EXPANSIONS: dict[str, str] = {
+    r"\bpr\b":   "permanent residence",
+    r"\bee\b":   "express entry",
+    r"\bpnp\b":  "provincial nominee program",
+    r"\boinp\b": "ontario immigrant nominee program",
+    r"\bpgwp\b": "post graduation work permit",
+    r"\bcrs\b":  "comprehensive ranking system",
+    r"\bclb\b":  "canadian language benchmark",
+    r"\bnoc\b":  "national occupational classification",
+    r"\bfsw\b":  "federal skilled worker",
+    r"\bcec\b":  "canadian experience class",
+    r"\blmia\b": "labour market impact assessment",
+    r"\bici\b":  "intra company transfer",
+    r"\beca\b":  "educational credential assessment",
+}
+
+
+# Freshness / "what's new" queries (e.g. "latest update", "current news") are
+# poorly served by literal keyword matching: the bare token "update" matches
+# unrelated chunks like "ESDC update the NOC on an ongoing basis". The corpus
+# has no live news feed; its genuinely time-sensitive content is the Express
+# Entry draw rounds and dated policy changes. We steer these queries toward
+# that content. Triggers are intentionally narrow (no generic word like
+# "change") so ordinary eligibility questions are unaffected.
+_FRESHNESS_TRIGGER = re.compile(r"\b(current|update|updates|latest|news|recent)\b")
+_FRESHNESS_ANCHOR = "recent changes effective date express entry draw rounds invitations latest news"
+
+
+def _expand_query(query: str) -> str:
+    """Append canonical expansions for any abbreviations found in the query.
+
+    The original query text is preserved (so exact matches still score) and
+    expanded terms are appended, widening BM25/vector recall. Expansion is
+    additive and case-insensitive; it never replaces the user's wording.
+    """
+    if not query:
+        return query
+    extras: list[str] = []
+    lower = query.lower()
+    for pattern, expansion in _QUERY_EXPANSIONS.items():
+        if re.search(pattern, lower) and expansion not in lower:
+            extras.append(expansion)
+    if _FRESHNESS_TRIGGER.search(lower):
+        extras.append(_FRESHNESS_ANCHOR)
+    if not extras:
+        return query
+    return f"{query} {' '.join(extras)}"
+
+
 def _normalize_scores(raw: dict[str, float]) -> dict[str, float]:
     """Min-max normalize a score dict to [0, 1]."""
     if not raw:
@@ -150,15 +204,30 @@ class BM25Index:
 
 
 # ---------------------------------------------------------------------------
-# Chunk loading
+# Chunk loading (cached by file mtime)
 # ---------------------------------------------------------------------------
 
-def _load_chunks() -> list[dict]:
-    """Load chunk records from the processed JSONL file."""
+_CHUNKS_CACHE: list[dict] | None = None
+_CHUNKS_CACHE_MTIME: float = -1.0
+_BM25_CACHE: "BM25Index | None" = None
+_BM25_CACHE_MTIME: float = -1.0
+_ID_TO_IDX_CACHE: dict[str, int] | None = None
+
+
+def _chunks_file_mtime() -> float:
+    """Return the processed chunks file mtime, or -1 if missing."""
+    try:
+        return PROCESSED_CHUNKS_FILE.stat().st_mtime
+    except OSError:
+        return -1.0
+
+
+def _read_chunks_from_disk() -> list[dict]:
+    """Read chunk records from the processed JSONL file (uncached)."""
     if not PROCESSED_CHUNKS_FILE.exists():
         return []
     rows = []
-    with open(PROCESSED_CHUNKS_FILE, encoding="utf-8") as f:
+    with open(PROCESSED_CHUNKS_FILE, encoding="utf-8", errors="ignore") as f:
         for line in f:
             stripped = line.strip()
             if not stripped:
@@ -168,6 +237,38 @@ def _load_chunks() -> list[dict]:
             except json.JSONDecodeError:
                 continue
     return rows
+
+
+def _load_chunks() -> list[dict]:
+    """Load chunk records, cached in-process and invalidated on file change.
+
+    Eliminates the repeated full-corpus disk read that previously happened on
+    every retrieve() call (and twice per call via _vector_rank).
+    """
+    global _CHUNKS_CACHE, _CHUNKS_CACHE_MTIME
+    mtime = _chunks_file_mtime()
+    if _CHUNKS_CACHE is not None and mtime == _CHUNKS_CACHE_MTIME:
+        return _CHUNKS_CACHE
+    _CHUNKS_CACHE = _read_chunks_from_disk()
+    _CHUNKS_CACHE_MTIME = mtime
+    return _CHUNKS_CACHE
+
+
+def _get_cached_bm25() -> tuple["BM25Index", dict[str, int], list[dict]]:
+    """Return a BM25 index built once over the full corpus, plus a
+    chunk_id -> doc_idx map. Rebuilt only when the chunks file changes.
+    """
+    global _BM25_CACHE, _BM25_CACHE_MTIME, _ID_TO_IDX_CACHE
+    chunks = _load_chunks()
+    mtime = _chunks_file_mtime()
+    if _BM25_CACHE is not None and mtime == _BM25_CACHE_MTIME and _ID_TO_IDX_CACHE is not None:
+        return _BM25_CACHE, _ID_TO_IDX_CACHE, chunks
+    _BM25_CACHE = BM25Index(chunks)
+    _ID_TO_IDX_CACHE = {
+        str(row.get("chunk_id", "")): idx for idx, row in enumerate(chunks)
+    }
+    _BM25_CACHE_MTIME = mtime
+    return _BM25_CACHE, _ID_TO_IDX_CACHE, chunks
 
 
 def _sanitize_metadata_for_chroma(md: dict[str, Any]) -> dict[str, Any]:
@@ -235,7 +336,16 @@ def _ensure_chroma_index(rows: list[dict]) -> Collection:
     global _CHROMA_INDEXED_COUNT
     target_count = len(rows)
 
-    # Rebuild when corpus size changed or first use.
+    # On first access this session, sync from the actual collection count.
+    # This avoids a full re-embed on every server restart when the index
+    # is already built and the corpus hasn't changed.
+    if _CHROMA_INDEXED_COUNT == -1:
+        actual_count = collection.count()
+        if actual_count == target_count and actual_count > 0:
+            _CHROMA_INDEXED_COUNT = actual_count
+            return collection
+
+    # Rebuild only when corpus size has genuinely changed.
     if _CHROMA_INDEXED_COUNT != target_count:
         return _rebuild_chroma_index(rows)
     return collection
@@ -322,7 +432,12 @@ def retrieve(request: RetrievalRequest) -> list[RetrievalResult]:
     4. Blend scores (BM25 0.6 + vector 0.4), then rerank.
     5. Return top_k_final results with citation metadata.
     """
-    all_chunks = _load_chunks()
+    # Step 0: cached full-corpus BM25 index (built once, reused across queries)
+    bm25, id_to_idx, all_chunks = _get_cached_bm25()
+
+    # Expand abbreviations (PR, EE, PNP, …) for retrieval recall. The original
+    # query is preserved separately for phrase-boost reranking.
+    expanded_query = _expand_query(request.query)
 
     # Step 1: metadata filter
     filtered = [row for row in all_chunks if _filter_passes(row, request)]
@@ -333,17 +448,23 @@ def retrieve(request: RetrievalRequest) -> list[RetrievalResult]:
     if not filtered:
         return []
 
-    # Step 2: BM25 scoring
-    bm25 = BM25Index(filtered)
-    bm25_ranked = bm25.rank(request.query, top_k=request.top_k_initial)
-    bm25_raw: dict[str, float] = {
-        str(filtered[idx].get("chunk_id", "")): score for idx, score in bm25_ranked
-    }
+    # Step 2: BM25 scoring over the full corpus, then keep only candidates that
+    # pass the active metadata filters. Ranking wider (×4) preserves recall so
+    # enough filtered docs survive. Avoids rebuilding BM25 on every request.
+    filtered_ids = {str(row.get("chunk_id", "")) for row in filtered}
+    bm25_ranked_all = bm25.rank(expanded_query, top_k=request.top_k_initial * 4)
+    bm25_raw: dict[str, float] = {}
+    for idx, score in bm25_ranked_all:
+        cid = str(all_chunks[idx].get("chunk_id", ""))
+        if cid in filtered_ids:
+            bm25_raw[cid] = score
+        if len(bm25_raw) >= request.top_k_initial:
+            break
 
     # Step 3: Vector scoring via Chroma (fallback to BM25-only if unavailable)
     vector_raw: dict[str, float] = {}
     try:
-        vector_raw = _vector_rank(request.query, filtered, top_k=request.top_k_initial)
+        vector_raw = _vector_rank(expanded_query, filtered, top_k=request.top_k_initial)
     except Exception:
         vector_raw = {}
 

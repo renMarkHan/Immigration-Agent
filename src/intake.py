@@ -121,6 +121,8 @@ OPTIONAL_FIELDS: list[str] = [
     "spouse_education",
     "spouse_language_score",
     "spouse_canadian_work_months",
+    "immigration_status",
+    "work_permit_type",
 ]
 
 # Human-readable labels and clarification prompts for each required field
@@ -338,6 +340,12 @@ def route_scene(user_text: str) -> ActionRoute:
         if kw in text_lower:
             return ActionRoute.ACTION_3
 
+    # ACTION_1: pathway overview (check BEFORE ACTION_2 to prevent "my profile"
+    #    regex stealing queries like "What pathways exist for my profile?")
+    for kw in _ACTION_1_KEYWORDS:
+        if kw in text_lower:
+            return ActionRoute.ACTION_1
+
     # ACTION_4: document checklist
     for kw in _ACTION_4_KEYWORDS:
         if kw in text_lower:
@@ -347,11 +355,6 @@ def route_scene(user_text: str) -> ActionRoute:
     for pattern in _ACTION_2_PATTERNS:
         if pattern.search(user_text):
             return ActionRoute.ACTION_2
-
-    # ACTION_1: pathway overview (default for general queries)
-    for kw in _ACTION_1_KEYWORDS:
-        if kw in text_lower:
-            return ActionRoute.ACTION_1
 
     # Default: eligibility check (most common user intent)
     return ActionRoute.ACTION_2
@@ -520,17 +523,15 @@ class IntakeStateMachine:
     # ── Private helpers ──────────────────────────────────────────────────────
 
     def _greeting_message(self, completeness: IntakeCompleteness) -> str:
-        """Build the initial greeting + first question(s)."""
-        questions = self._build_questions(
-            completeness.missing_required,
-            max_q=self._MAX_QUESTIONS_PER_TURN,
-        )
+        """Build the initial greeting message. No upfront intake questions —
+        the user can fill the sidebar profile or just chat naturally."""
         return (
-            "Hello! I'm your Canada Immigration & PR Navigator. "
-            "I can help you explore PR pathways, check your eligibility, "
-            "estimate your CRS score, and build a document checklist.\n\n"
-            "To get started, I need a few details about your background:\n\n"
-            + questions
+            "Hello! I'm your Canada Immigration & PR Navigator — I can help you "
+            "explore PR pathways, check eligibility, estimate your CRS score, "
+            "and build a document checklist.\n\n"
+            "You can fill in your profile in the sidebar on the left, or just tell "
+            "me about your situation in plain language.\n\n"
+            "What would you like to know?"
         )
 
     def _build_questions(
@@ -556,12 +557,166 @@ def extract_fields(user_text: str) -> dict:
     return _extract_fields(user_text)
 
 def _extract_fields(user_text: str) -> dict:
-    """Extract field values from free-form user text.
+    """Extract intake field values from free-form user text using the LLM.
 
-    This is a rule-based stub for MVP. Replace with LLM structured output
-    before the Demo to handle natural language variations reliably.
+    Calls src/llm_client.generate() with a structured JSON extraction prompt.
+    Falls back to the regex extractor if the LLM is unavailable or returns
+    unparseable output.
 
-    Returns a dict of {field_name: value} for any fields detected.
+    Owner: Keqing Wang (Role B) — LLM extraction replaces the regex stub per
+    the TODO comment in the original implementation.
+    Integration wiring: Yuhan Ren (Role C / Framework) + Ehraaz Atif (Role E).
+    """
+    result = _extract_fields_llm(user_text)
+    if result is not None:
+        return result
+    return _extract_fields_regex(user_text)
+
+
+def _extract_fields_llm(user_text: str) -> dict | None:
+    """LLM-based extractor. Returns None if LLM unavailable or output unparseable.
+
+    Fixes:
+    - Strips <think>...</think> reasoning tokens (qwen3 emits these)
+    - Uses regex search for the JSON object so preamble prose doesn't break parse
+    - max_tokens=512 to fit all 8 fields plus model reasoning budget
+    - Any parse failure returns None cleanly, falling through to regex
+    """
+    import json as _json
+    import re as _re
+    import os as _os
+
+    if not (_os.environ.get("LLM_API_KEY") and _os.environ.get("LLM_ENDPOINT")):
+        return None
+
+    try:
+        from src.llm_client import generate
+
+        prompt = (
+            "Extract intake profile fields from the user message below.\n"
+            "Return ONLY a JSON object. No explanation, no markdown, no preamble.\n\n"
+            "Fields (include only what the user explicitly states):\n"
+            "  age_band          : one of 18-24, 25-29, 30-34, 35-39, 40-44, 45+\n"
+            "  education_level   : e.g. \"Master's, Canada\" or \"Bachelor's\"\n"
+            "                      Append ', Canada' only if degree was obtained in Canada\n"
+            "  language_score    : verbatim text of language test scores\n"
+            "  current_province  : Canadian province name only (omit if user is outside Canada)\n"
+            "  target_province   : Canadian province name only (omit if user is outside Canada)\n"
+            "  job_offer_status  : yes | no | unknown\n"
+            "  graduation_date   : e.g. June 2024\n"
+            "  canadian_work_months : integer, months of skilled work IN Canada\n"
+            "  noc_code          : NOC code string if mentioned\n"
+            "  foreign_work_months  : integer, months of skilled work outside Canada\n"
+            "  immigration_status   : one of 'International Student', 'Work Permit Holder',\n"
+            "                         'Visitor / No Permit', 'Outside Canada', 'Permanent Resident'\n"
+            "  work_permit_type     : one of 'PGWP', 'LMIA / Employer-Specific',\n"
+            "                         'Intra-Company (ICT)', 'IEC Working Holiday', 'Other'\n"
+            "                         (only extract if user explicitly mentions a work permit type)\n\n"
+            "Rules:\n"
+            "  - current_province and target_province must be Canadian provinces only.\n"
+            "  - Return {} if no intake fields are present.\n\n"
+            "User message: " + _json.dumps(user_text) + "\n\nJSON:"
+        )
+
+        raw = generate(
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=512,
+            temperature=0.0,
+        )
+
+        if not raw:
+            return None
+
+        # Strip <think>...</think> reasoning tokens emitted by qwen3
+        raw = _re.sub(r"<think>.*?</think>", "", raw, flags=_re.DOTALL).strip()
+
+        # Strip markdown fences if the model ignored the instruction
+        if raw.startswith("```"):
+            parts = raw.split("```")
+            for part in parts:
+                part = part.strip()
+                if part.startswith("json"):
+                    part = part[4:].strip()
+                if part.startswith("{"):
+                    raw = part
+                    break
+
+        # Find the JSON object (tolerates leading/trailing prose)
+        m = _re.search(r"\{.*\}", raw, _re.DOTALL)
+        if not m:
+            return None
+
+        extracted = _json.loads(m.group())
+        if not isinstance(extracted, dict):
+            return None
+
+        # Validate and sanitise
+        cleaned: dict = {}
+
+        if extracted.get("age_band") in {"18-24","25-29","30-34","35-39","40-44","45+"}:
+            cleaned["age_band"] = extracted["age_band"]
+
+        if isinstance(extracted.get("education_level"), str) and len(extracted["education_level"]) < 80:
+            cleaned["education_level"] = extracted["education_level"]
+
+        if isinstance(extracted.get("language_score"), str) and len(extracted["language_score"]) < 200:
+            cleaned["language_score"] = extracted["language_score"]
+
+        VALID_PROVINCES = {
+            "Ontario", "British Columbia", "Alberta", "Quebec", "Manitoba",
+            "Saskatchewan", "Nova Scotia", "New Brunswick",
+            "Prince Edward Island", "Newfoundland and Labrador",
+            "Northwest Territories", "Yukon", "Nunavut",
+        }
+        for field in ("current_province", "target_province"):
+            if extracted.get(field) in VALID_PROVINCES:
+                cleaned[field] = extracted[field]
+
+        if extracted.get("job_offer_status") in {"yes", "no", "unknown"}:
+            cleaned["job_offer_status"] = extracted["job_offer_status"]
+
+        if isinstance(extracted.get("graduation_date"), str) and len(extracted["graduation_date"]) < 30:
+            cleaned["graduation_date"] = extracted["graduation_date"]
+
+        cwm = extracted.get("canadian_work_months")
+        if isinstance(cwm, (int, float)):
+            cleaned["canadian_work_months"] = int(cwm)
+
+        if isinstance(extracted.get("noc_code"), str) and len(extracted["noc_code"]) < 20:
+            cleaned["noc_code"] = extracted["noc_code"]
+
+        fwm = extracted.get("foreign_work_months")
+        if isinstance(fwm, (int, float)):
+            cleaned["foreign_work_months"] = int(fwm)
+
+        VALID_IMMIGRATION_STATUSES = {
+            "International Student", "Work Permit Holder",
+            "Visitor / No Permit", "Outside Canada", "Permanent Resident",
+        }
+        if extracted.get("immigration_status") in VALID_IMMIGRATION_STATUSES:
+            cleaned["immigration_status"] = extracted["immigration_status"]
+
+        VALID_WORK_PERMIT_TYPES = {
+            "PGWP", "LMIA / Employer-Specific",
+            "Intra-Company (ICT)", "IEC Working Holiday", "Other",
+        }
+        if extracted.get("work_permit_type") in VALID_WORK_PERMIT_TYPES:
+            cleaned["work_permit_type"] = extracted["work_permit_type"]
+
+        return cleaned
+
+    except Exception:
+        return None  # always fall through to regex on any failure
+
+
+def _extract_fields_regex(user_text: str) -> dict:
+    """Regex fallback extractor. Used when LLM is unavailable.
+
+    Fixes vs original stub:
+    - Province map no longer uses bare "on" (Ontario abbreviation) which
+      matched the English preposition "on" in every sentence.
+    - Education patterns expanded to cover more common phrasings.
+    - Province extraction requires explicit location context.
     """
     extracted: dict = {}
     text = user_text.strip()
@@ -570,9 +725,7 @@ def _extract_fields(user_text: str) -> dict:
     age_match = re.search(r"\b(1[89]|[2-5]\d)\b", text)
     if age_match:
         age = int(age_match.group())
-        if age < 18:
-            pass
-        elif age <= 24:
+        if age <= 24:
             extracted["age_band"] = "18-24"
         elif age <= 29:
             extracted["age_band"] = "25-29"
@@ -585,58 +738,70 @@ def _extract_fields(user_text: str) -> dict:
         else:
             extracted["age_band"] = "45+"
 
-    # education_level
+    # education_level — expanded patterns
     edu_patterns = [
-        (r"\b(phd|ph\.d|doctorate|doctoral)\b", "Doctorate"),
-        (r"\b(master|msc|mba|m\.eng|m\.a\.|master'?s)\b", "Master's"),
-        (r"\b(bachelor|bsc|b\.a\.|b\.eng|bachelor'?s|undergraduate)\b", "Bachelor's"),
-        (r"\b(diploma|college diploma)\b", "Diploma"),
+        (r"\b(phd|ph\.d|ph\.d\.|doctorate|doctoral)\b", "Doctorate"),
+        (r"\b(master|msc|mba|m\.eng|m\.a\.|master'?s|graduate degree|grad degree|"
+         r"postgraduate|post-graduate|m\.sc)\b", "Master's"),
+        (r"\b(bachelor|bsc|b\.a\.|b\.eng|bachelor'?s|undergraduate|undergrad|"
+         r"b\.sc|honours degree)\b", "Bachelor's"),
+        (r"\b(diploma|college diploma|advanced diploma)\b", "Diploma"),
         (r"\b(high school|secondary school|grade 12)\b", "High School"),
     ]
+    canada_re = r"\bcanada\b|\bcanadian\b|\bontario\b|\bbc\b|\balberta\b|\bquebec\b"
     for pattern, label in edu_patterns:
         if re.search(pattern, text, re.IGNORECASE):
-            # Check if obtained in Canada
-            if re.search(r"\bcanada\b|\bcanadian\b|\bontario\b|\bbc\b|\balberta\b", text, re.IGNORECASE):
-                extracted["education_level"] = f"{label}, Canada"
-            else:
-                extracted["education_level"] = label
+            in_canada = bool(re.search(canada_re, text, re.IGNORECASE))
+            extracted["education_level"] = f"{label}, Canada" if in_canada else label
             break
 
-    # language_score (IELTS / CELPIP / TEF / TCF)
+    # language_score
     lang_match = re.search(
-        r"\b(ielts|celpip|tef|tcf)\b.{0,60}?([0-9]\.[05]|[0-9])\b",
+        r"\b(ielts|celpip|tef|tcf)\b.{0,80}?([0-9]\.[05]|[0-9])\b",
         text, re.IGNORECASE
     )
     if lang_match:
-        extracted["language_score"] = text[:120]  # store raw text for now
+        extracted["language_score"] = text[:150]
 
-    # current_province / target_province
-    province_map = {
-        "ontario": "Ontario", "on": "Ontario",
-        "british columbia": "British Columbia", "bc": "British Columbia",
-        "alberta": "Alberta", "ab": "Alberta",
-        "quebec": "Quebec", "qc": "Quebec",
-        "manitoba": "Manitoba", "mb": "Manitoba",
-        "saskatchewan": "Saskatchewan", "sk": "Saskatchewan",
-        "nova scotia": "Nova Scotia", "ns": "Nova Scotia",
-        "new brunswick": "New Brunswick", "nb": "New Brunswick",
-        "pei": "Prince Edward Island", "prince edward island": "Prince Edward Island",
-        "newfoundland": "Newfoundland and Labrador", "nl": "Newfoundland and Labrador",
+    # Province — full names only (removed "on", "nb", "ns" etc. which matched
+    # common English words like "on", "in", verbs, prepositions)
+    province_map_safe = {
+        "ontario":                    "Ontario",
+        "british columbia":           "British Columbia",
+        "alberta":                    "Alberta",
+        "quebec":                     "Quebec",
+        "manitoba":                   "Manitoba",
+        "saskatchewan":               "Saskatchewan",
+        "nova scotia":                "Nova Scotia",
+        "new brunswick":              "New Brunswick",
+        "prince edward island":       "Prince Edward Island",
+        "newfoundland":               "Newfoundland and Labrador",
+        "northwest territories":      "Northwest Territories",
+        "yukon":                      "Yukon",
+        "nunavut":                    "Nunavut",
     }
-    text_lower = text.lower()
-    for key, province in province_map.items():
-        if re.search(r"\b" + re.escape(key) + r"\b", text_lower):
-            if "current_province" not in extracted:
-                extracted["current_province"] = province
-            if "target_province" not in extracted:
-                extracted["target_province"] = province
-            break
+    # Also block explicit US locations from being converted to provinces
+    us_locations_re = r"\b(new york|los angeles|california|texas|florida|washington|"\
+                      r"chicago|seattle|boston|atlanta|denver|miami|arizona|nevada|"\
+                      r"\bny\b|\bca\b|\bnj\b|\busa\b|united states)\b"
+    if not re.search(us_locations_re, text, re.IGNORECASE):
+        text_lower = text.lower()
+        for key, province in province_map_safe.items():
+            if re.search(r"\b" + re.escape(key) + r"\b", text_lower):
+                if "current_province" not in extracted:
+                    extracted["current_province"] = province
+                if "target_province" not in extracted:
+                    extracted["target_province"] = province
+                break
 
     # job_offer_status
-    if re.search(r"\b(yes|i have|i do have|i got).{0,20}(job offer|offer)\b", text, re.IGNORECASE):
+    if re.search(r"\byes\b.{0,5}\boffer\b|\b(i have|i do have|got) a job offer\b", text, re.IGNORECASE):
         extracted["job_offer_status"] = "yes"
-    elif re.search(r"\b(no|i don'?t|i do not|no job offer)\b", text, re.IGNORECASE):
+    elif re.search(r"\b(no job offer|don'?t have.{0,10}offer|do not have.{0,10}offer|no offer)\b",
+                   text, re.IGNORECASE):
         extracted["job_offer_status"] = "no"
+    elif re.search(r"\bno\b", text, re.IGNORECASE) and "offer" not in text.lower():
+        pass  # "no" alone is too ambiguous — skip
     elif re.search(r"\b(not sure|unknown|unsure|maybe)\b", text, re.IGNORECASE):
         extracted["job_offer_status"] = "unknown"
 
@@ -654,13 +819,21 @@ def _extract_fields(user_text: str) -> dict:
         r"(\d+)\s*(month|months|yr|year|years).{0,30}(work|experience|job|employ)",
         text, re.IGNORECASE
     )
-    if work_match:
+    if not work_match:
+        work_match = re.search(
+            r"(work|experience|job).{0,30}(\d+)\s*(month|months|yr|year|years)",
+            text, re.IGNORECASE
+        )
+        if work_match:
+            amount = int(work_match.group(2))
+            unit   = work_match.group(3).lower()
+            extracted["canadian_work_months"] = amount * 12 if "year" in unit else amount
+    else:
         amount = int(work_match.group(1))
-        unit = work_match.group(2).lower()
-        if "year" in unit:
-            amount *= 12
-        extracted["canadian_work_months"] = amount
-    elif re.search(r"\bno (canadian |canada )?work\b|\b0 month\b|\bnever worked\b", text, re.IGNORECASE):
+        unit   = work_match.group(2).lower()
+        extracted["canadian_work_months"] = amount * 12 if "year" in unit else amount
+
+    if re.search(r"\bno (canadian |canada )?work\b|\b0 month\b|\bnever worked\b", text, re.IGNORECASE):
         extracted["canadian_work_months"] = 0
 
     return extracted

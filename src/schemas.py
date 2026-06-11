@@ -87,6 +87,8 @@ class IntakeProfile(BaseModel):
     spouse_education: str | None = None
     spouse_language_score: str | None = None
     spouse_canadian_work_months: int | None = None
+    immigration_status: str | None = None   # e.g. "Work Permit Holder", "International Student"
+    work_permit_type: str | None = None     # e.g. "PGWP", "LMIA", "ICT"
 
 
 # ---------------------------------------------------------------------------
@@ -143,3 +145,7 @@ class FinalAnswer(BaseModel):
     retry_count: int = Field(default=0, description="D-003: max 1 retry allowed")
     action_type: ActionType | None = None
     confidence_warning: str | None = None
+    risk_explain: dict[str, Any] | None = None
+    intent_scores: dict[str, float] | None = None
+    intent_top2: list[str] | None = None
+    intent_ambiguous: bool = False

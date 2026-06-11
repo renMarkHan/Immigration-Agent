@@ -1,18 +1,20 @@
 # Canada Immigration & PR Navigator
 
-Current main-branch MVP scaffold for Team 3. This repository is no longer just a bare scaffold: the main branch now includes an interactive CLI, a working orchestrator, hybrid retrieval with ChromaDB, section-based ingestion, a Federal Express Entry CRS tool path, and an evaluation pipeline with report artifacts.
+Team 3 — MVP implementation.
 
-## Current status
+## What this project includes
 
-| Area | Current state |
-|------|---------------|
-| Project mode | Framework-first, evals-driven MVP |
-| Runtime model path | Hosted course endpoint via `src/llm_client.py` |
-| Retrieval baseline | Hybrid BM25 + vector + rerank |
-| Tool scope | Federal Express Entry CRS only |
-| Citation policy | All grounded answers must preserve required citation fields |
-| Integration status | Runnable end-to-end on the current main branch |
-| Delivery state | Interactive MVP scaffold, not production-ready |
+- Shared schema contracts for all modules (Pydantic)
+- Multi-turn intake state machine with profile collection
+- End-to-end orchestrator with intent routing, L3 safety gate, and D-003 retry logic
+- Scoring-based intent classifier (5 intents, typo-tolerant, personal-context amplifier)
+- Risk-level routing with decision trace (`risk_explain` in every response)
+- Hybrid BM25 + vector retrieval (ChromaDB, local index)
+- CRS calculator policy tool
+- Action-specific LLM prompt templates (4 action types, QA sub-type selection)
+- Flask web UI served on port 5050
+- Express Entry draw data ingestion from IRCC JSON API
+- Eval harness with intent accuracy, confusion matrix, and citation checks
 
 This repo is in an interactive MVP phase, not a production-ready release phase. The architecture and contracts are in place, but answer quality still depends on continued retrieval, ingestion, and prompt tuning.
 
@@ -69,38 +71,37 @@ flowchart TD
 .
 ├── README.md
 ├── requirements.txt
+├── src/
+│   ├── schemas.py              — Pydantic contracts (IntakeProfile, FinalAnswer, …)
+│   ├── llm_client.py           — LLM endpoint wrapper
+│   ├── orchestrator.py         — Pipeline wiring (intent → retrieval → tools → answer)
+│   ├── agent_module.py         — Intent classifier, risk routing, answer builder
+│   ├── retrieval_module.py     — Hybrid BM25 + vector retrieval (ChromaDB)
+│   ├── ingestion_module.py     — HTML scraping, chunking, indexing
+│   ├── fetch_draws_data.py     — Express Entry draw data fetcher (IRCC JSON API)
+│   ├── policy_tool_module.py   — CRS calculator, pathway backbone tools
+│   ├── intake.py               — Multi-turn intake state machine
+│   ├── app.py                  — Flask web server (port 5050)
+│   ├── chat_cli.py             — Terminal interactive chat loop
+│   ├── main.py                 — Smoke test (connectivity + mock pipeline)
+│   └── agent/
+│       └── system_prompt.py    — System prompt v1, risk-tier templates
 ├── data/
-│   ├── raw/
-│   ├── processed/
-│   └── sources/
-├── chroma_db/
-├── docs/
-├── eval/
-│   ├── samples.jsonl
-│   ├── run_evaluation.py
-│   ├── run_hallucination_report.py
-│   ├── run_manual_hallucination_report.py
-│   └── scoring.py
-└── src/
-    ├── agent/
-    ├── agent_module.py
-    ├── chat_cli.py
-    ├── demo_ontario_flow.py
-    ├── ingestion_module.py
-    ├── intake.py
-    ├── llm_client.py
-    ├── main.py
-    ├── orchestrator.py
-    ├── policy_tool_module.py
-    ├── retrieval_module.py
-    └── schemas.py
+│   ├── raw/                    — Scraped HTML + ee-rounds-data.json snapshot
+│   └── processed/
+│       └── chunks.jsonl        — Chunked policy text (BM25 + embedding input)
+├── chroma_db/                  — Persistent ChromaDB vector index
+└── eval/
+    ├── samples.jsonl           — 15 eval samples (intent labels, risk levels)
+    └── run_eval.py             — Eval harness with intent confusion matrix
 ```
 
 ## Prerequisites
 
 - Python 3.11
-- `pip` and `venv`
-- A valid student bearer token for the hosted LLM endpoint
+- pip + venv
+- Valid student bearer token for LLM endpoint
+- ChromaDB index built (see **Build retrieval index** below)
 
 ## Setup
 
@@ -125,102 +126,131 @@ LLM_API_KEY=<your_student_id_token>
 LLM_MODEL=qwen3-30b-a3b-fp8
 ```
 
-## Quick start
+## Build retrieval index
 
-Run the smoke check:
+Run once before first use (or after adding new data):
 
 ```bash
-python -m src.main
+python -m src.ingestion_module
+python -m src.fetch_draws_data --offline   # inject Express Entry draw data
 ```
 
-This performs:
-- a real LLM connectivity check
-- a mock end-to-end pipeline run through the orchestrator
+`--offline` uses the local snapshot in `data/raw/ee-rounds-data.json`.
+Omit `--offline` to fetch the latest draw results live from IRCC.
+
+## Launch web chatbox (recommended)
+
+```bash
+python -m src.app
+```
+
+Opens at **http://localhost:5050**. Supports free-text queries — no profile
+fields required for factual and policy questions.
 
 ## Demo guide
 
-If you need a short presentation flow for a TA, teammate, or demo audience, use this order:
-
-1. Run `python -m src.main` to show the repo is configured and the pipeline boots.
-2. Run `python -m src.chat_cli` to show the interactive path and profile-context commands.
-3. Ask one CRS-style query to show Action 3 and tool-backed response generation.
-4. Run `python -m src.demo_ontario_flow` to show ingestion -> retrieval -> citation-grounded answer.
-5. Run `python eval/run_evaluation.py --limit 10` to show the eval-driven workflow.
-
-Good demo question examples:
-
-- `I am 27 years old with a Master's degree in Canada, IELTS 8 7 7 7, and 12 months of Canadian skilled work experience. What is my CRS score?`
-- `What is the requirement for Ontario Masters Graduate Stream?`
-- `What documents do I need for Express Entry?`
-
-## Run the interactive CLI
+Terminal-only, no web UI:
 
 ```bash
 python -m src.chat_cli
 ```
 
-Available commands inside the CLI:
+Available commands: `/help`, `/show`, `/set province <value>`,
+`/set program <value>`, `/set stream <value>`, `/clear`, `/exit`
 
-- `/help`
-- `/show`
-- `/set province <value>`
-- `/set program <value>`
-- `/set stream <value>`
-- `/clear`
-- `/exit`
-
-Notes:
-- This is a terminal-based QA path, not a web UI.
-- Session profile reuse is supported inside the CLI.
-- Persistent user-profile storage is intentionally out of MVP scope.
-
-## Run the Ontario demo flow
+## Run smoke test
 
 ```bash
-python -m src.demo_ontario_flow
+python -m src.main
 ```
 
-This demo shows the intended process shape for teammate alignment:
+Tests LLM endpoint connectivity and runs a mock pipeline pass.
 
-1. Ingest the Ontario Masters Graduate Stream page
-2. Retrieve evidence for the query `what is the requirement for ontario master graduate stream?`
-3. Return a citation-grounded answer through the full pipeline
-
-## Run ingestion
-
-Ingest all registry entries:
+## Run eval harness
 
 ```bash
 python -m src.ingestion_module all
 ```
 
-Ingest only priority `P0` sources:
+Output: `eval/results/latest.json`
+
+Metrics reported:
+- `pass_rate` — answer content + citation checks
+- `intent_accuracy` — classifier accuracy over labelled samples
+- `intent_confusion_matrix` — per-intent breakdown
+
+Intent-only fast check (no LLM call, <5 s):
+
+```bash
+python -m eval.run_eval --intent-only
+```
+
+## Keep draw data current
+
+IRCC publishes new draw results roughly every two weeks. Refresh:
+
+```bash
+python -m src.fetch_draws_data          # live fetch + rebuild index
+python -m src.fetch_draws_data --offline # rebuild from local snapshot only
+```
+
+## Run Ontario retrieval demo
+
+```bash
+python -m src.demo_ontario_flow
+```
+
+Demonstrates ingest → retrieve → cite for the OINP Masters Graduate Stream.
 
 ```bash
 python -m src.ingestion_module P0
 ```
 
-Artifacts written during ingestion and retrieval:
+- Role A (Ella): `src/agent_module.py` — intent classifier, risk routing, answer builder
+- Role B (Keqing): `src/retrieval_module.py`, `src/agent/system_prompt.py` — hybrid retrieval, system prompt
+- Role C (Yuhan): `src/policy_tool_module.py`, `src/llm_client.py`, `src/schemas.py`, `src/orchestrator.py` — tools, contracts, pipeline
+- Role D (Chao): `src/ingestion_module.py`, `src/fetch_draws_data.py` — data ingestion, draw data
+- Role E (Ehraaz): `src/app.py`, `src/intake.py` — web server, intake state machine
 
 - raw HTML snapshots in `data/raw/`
 - processed chunks in `data/processed/chunks.jsonl`
 - persistent vector index in `chroma_db/`
 
-## Run evaluation
+- Do not change function signatures without notifying Role E + Framework Owner.
+- Add all cross-module data fields in `src/schemas.py` only.
+- Keep citation fields intact in every `FinalAnswer`:
+  - `source_url`
+  - `section_or_title`
+  - `effective_date_or_last_updated_or_unknown`
+  - `accessed_at`
+- After meaningful changes, run `python -m eval.run_eval`.
+- The intake gate in `src/app.py` is bypassed for `qa`, `general`, and `calculate`
+  intents — these query types do not require a full user profile.
 
-Run the baseline evaluation pipeline:
+## Known limitations
 
-```bash
-python eval/run_evaluation.py
-```
+- `qwen3-30b-a3b-fp8` in reasoning mode consumes token budget for thinking before
+  generating output. Use `max_tokens ≥ 2048` (already set in `_call_llm`).
+- IRCC draw cutoff numbers are loaded via JavaScript on the rounds page — static
+  HTML scraping captures no actual values. Use `python -m src.fetch_draws_data`
+  to fetch the data from the IRCC JSON API instead.
+- ChromaDB default collection cap is 2000 documents; the full corpus is 2451 chunks.
+  Run `python -m src.ingestion_module` followed by `python -m src.fetch_draws_data`
+  to rebuild with the full set.
 
-Run only the first `N` samples:
+## Current implementation status
 
-```bash
-python eval/run_evaluation.py --limit 10
-```
-
-Generate the lenient hallucination report from existing eval artifacts:
+- ✅ Shared contracts (schemas) — `FinalAnswer` includes `risk_explain`, `intent_scores`, `intent_top2`, `intent_ambiguous`
+- ✅ Orchestrator pipeline — intent → L3 safety gate → retrieval → tools → risk routing → answer → retry
+- ✅ Intent classifier — scoring-based, 5 intents, typo-tolerant, personal-context amplifier
+- ✅ Risk routing with explain trace — L1/L2/L3 with decision steps in every response
+- ✅ Hybrid retrieval — BM25 (weight 0.6) + ChromaDB vector (weight 0.4), local index
+- ✅ CRS calculator policy tool
+- ✅ Action-specific prompt templates — 4 action types; QA sub-typed (factual vs document)
+- ✅ Web UI — Flask + `python -m src.app` → http://localhost:5050
+- ✅ Multi-turn intake — bypassed for factual/policy queries that don't need profile fields
+- ✅ Express Entry draw data — `src/fetch_draws_data.py` injects cutoff history into index
+- ✅ Eval harness — pass rate, intent accuracy, confusion matrix; 11/11 intent samples pass
 
 ```bash
 python eval/run_hallucination_report.py

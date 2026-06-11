@@ -98,6 +98,10 @@ OUTPUT FORMAT RULES:
    numbered lists only.
 7. Keep answers concise: aim for 150–300 words for factual queries,
    300–500 words for eligibility matching.
+8. Do NOT insert blank lines between numbered or bulleted list items.
+   Write consecutive list items with no blank lines between them.
+9. Each list item must be on a single line. Do not wrap a single item across
+   multiple lines.
 
 
 ========================================================================
