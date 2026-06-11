@@ -1965,14 +1965,9 @@ async function sendMessage() {
           updateTypingLabel(evt.message);
 
         } else if (evt.type === 'token') {
-          hideTyping();
-          if (!streamRow) {
-            streamRow = _createStreamBubble();
-            streamContent = streamRow.querySelector('.stream-content');
-          }
-          streamText += evt.content;
-          streamContent.textContent = streamText;
-          scrollToBottom();
+          /* Collect streamed tokens silently and render once on done,
+             so users see the full answer at once instead of typewriter output. */
+          streamText += (evt.content || '');
 
         } else if (evt.type === 'collecting') {
           hideTyping();
@@ -1985,6 +1980,9 @@ async function sendMessage() {
         } else if (evt.type === 'done') {
           hideTyping();
           if (streamRow) { streamRow.remove(); streamRow = null; }
+          if ((!evt.answer || !String(evt.answer).trim()) && streamText.trim()) {
+            evt.answer = streamText;
+          }
           if (evt.agent_message) appendAgentMessage(evt.agent_message);
           appendAnswer(evt);
           if (evt.profile) updateProfile(evt.profile);
