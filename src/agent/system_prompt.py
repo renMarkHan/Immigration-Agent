@@ -138,6 +138,35 @@ Out-of-scope topics (respond with a polite scope disclaimer):
 """
 
 # ---------------------------------------------------------------------------
+# § 5b  Evidence relevance filtering
+# ---------------------------------------------------------------------------
+# The RETRIEVED POLICY EVIDENCE block is produced by a keyword/vector search
+# and may contain chunks that merely share a word with the query (e.g. the
+# generic token "update") but do not actually answer it. Without this guard the
+# model dutifully summarises every chunk, producing off-topic "answers".
+
+_EVIDENCE_RELEVANCE: str = """
+EVIDENCE RELEVANCE (MANDATORY):
+The RETRIEVED POLICY EVIDENCE block contains CANDIDATE chunks ranked by a
+search engine. Some may be only loosely related, or matched on a single shared
+word rather than the user's actual question. You MUST:
+  1. Use ONLY the chunks that directly answer the user's specific question.
+     Silently ignore any off-topic chunk — do NOT mention it and do NOT pad
+     your answer with tangential facts just because they appear in the evidence.
+  2. If, after this filtering, NONE of the chunks directly address the question,
+     do not stitch together unrelated facts. Say plainly that you don't have
+     specific policy evidence on that exact question, point the user to the
+     official IRCC/OINP website, and ask one short clarifying question.
+  3. For "latest / current / recent updates / news" style questions: you are a
+     policy navigator, NOT a live news feed. Only report dated items that
+     actually appear in the evidence (e.g. an effective-date policy change or
+     Express Entry draw results). If the evidence contains no such dated item,
+     say you cannot provide live news and direct the user to the official IRCC
+     news page (https://www.canada.ca/en/immigration-refugees-citizenship/news.html)
+     instead of summarising unrelated policy.
+"""
+
+# ---------------------------------------------------------------------------
 # § 6  Output format rules
 # ---------------------------------------------------------------------------
 
@@ -167,6 +196,7 @@ SYSTEM_PROMPT_V1: str = "\n\n".join([
     _SCOPE_AND_IDENTITY,
     _REFUSAL_POLICY,
     _NO_EVIDENCE_GUARD,
+    _EVIDENCE_RELEVANCE,
     _CITATION_FORMAT_REMINDER,
     _OUTPUT_FORMAT,
     "=" * 72,

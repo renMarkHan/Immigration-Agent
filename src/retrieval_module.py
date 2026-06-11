@@ -87,6 +87,17 @@ _QUERY_EXPANSIONS: dict[str, str] = {
 }
 
 
+# Freshness / "what's new" queries (e.g. "latest update", "current news") are
+# poorly served by literal keyword matching: the bare token "update" matches
+# unrelated chunks like "ESDC update the NOC on an ongoing basis". The corpus
+# has no live news feed; its genuinely time-sensitive content is the Express
+# Entry draw rounds and dated policy changes. We steer these queries toward
+# that content. Triggers are intentionally narrow (no generic word like
+# "change") so ordinary eligibility questions are unaffected.
+_FRESHNESS_TRIGGER = re.compile(r"\b(current|update|updates|latest|news|recent)\b")
+_FRESHNESS_ANCHOR = "recent changes effective date express entry draw rounds invitations latest news"
+
+
 def _expand_query(query: str) -> str:
     """Append canonical expansions for any abbreviations found in the query.
 
@@ -101,6 +112,8 @@ def _expand_query(query: str) -> str:
     for pattern, expansion in _QUERY_EXPANSIONS.items():
         if re.search(pattern, lower) and expansion not in lower:
             extras.append(expansion)
+    if _FRESHNESS_TRIGGER.search(lower):
+        extras.append(_FRESHNESS_ANCHOR)
     if not extras:
         return query
     return f"{query} {' '.join(extras)}"
