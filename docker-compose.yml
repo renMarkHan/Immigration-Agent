@@ -1,0 +1,12 @@
+services:
+  app:
+    build: .
+    container_name: rag-app
+    ports:
+      - "5050:5050"
+    env_file:
+      - .env
+    volumes:
+      - ./chroma_db:/app/chroma_db
+      - ./data:/app/data
+    restart: unless-stopped
