@@ -18,7 +18,11 @@ Run:
 from __future__ import annotations
 
 import json
+import os
+import threading
+import time
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -33,6 +37,9 @@ load_dotenv()
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 
 app = Flask(__name__, static_folder=str(WEB_DIR), static_url_path="")
+
+SESSION_TTL_SECONDS = int(os.environ.get("SESSION_TTL_SECONDS", "21600"))  # 6h
+MAX_HISTORY_MESSAGES = int(os.environ.get("MAX_HISTORY_MESSAGES", "40"))
 
 
 def _prewarm_retrieval_index() -> None:
@@ -107,6 +114,7 @@ class SessionStore:
 
     def __init__(self):
         self._sessions: dict[str, dict] = {}
+        self._lock = threading.RLock()
 
     def create(self) -> tuple[str, object, object]:
         """Create a new session. Returns (session_id, machine, session)."""
@@ -115,23 +123,61 @@ class SessionStore:
         machine = IntakeStateMachine()
         session = machine.start_session()
         session_id = str(uuid.uuid4())
-        self._sessions[session_id] = {
-            "machine": machine,
-            "session": session,
-            "original_query": None,
-            "current_question": None,
-            "conv_history": [],   # list of {"role": "user"|"assistant", "content": str}
-        }
+        with self._lock:
+            self._sessions[session_id] = {
+                "machine": machine,
+                "session": session,
+                "original_query": None,
+                "current_question": None,
+                "conv_history": [],   # list of {"role": "user"|"assistant", "content": str}
+                "created_at": time.time(),
+                "last_accessed": time.time(),
+            }
         return session_id
 
     def get(self, session_id: str) -> dict | None:
-        return self._sessions.get(session_id)
+        with self._lock:
+            data = self._sessions.get(session_id)
+            if data is not None:
+                data["last_accessed"] = time.time()
+            return data
 
     def exists(self, session_id: str) -> bool:
-        return session_id in self._sessions
+        with self._lock:
+            return session_id in self._sessions
+
+    def delete(self, session_id: str) -> None:
+        with self._lock:
+            self._sessions.pop(session_id, None)
+
+    def prune_expired(self, ttl_seconds: int = SESSION_TTL_SECONDS) -> int:
+        now = time.time()
+        removed = 0
+        with self._lock:
+            stale = [
+                sid for sid, payload in self._sessions.items()
+                if now - float(payload.get("last_accessed", now)) > ttl_seconds
+            ]
+            for sid in stale:
+                self._sessions.pop(sid, None)
+                removed += 1
+        return removed
 
 
 _store = SessionStore()
+
+
+@dataclass
+class ChatTurnContext:
+    session_id: str
+    data: dict
+    session: object
+    turn: object
+    message: str
+    was_ready_before: bool
+    extracted_fields: dict
+    base_meta: dict
+    pipeline_query: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -203,6 +249,112 @@ def _profile_summary(profile) -> dict:
     return {"required": required, "optional": optional}
 
 
+def _contains_new_question(message: str) -> bool:
+    msg_lower = message.lower()
+    return (
+        '?' in message
+        or any(msg_lower.startswith(w) for w in [
+            'what', 'how', 'which', 'why', 'when', 'where', 'who',
+            'am i', 'can i', 'do i', 'will i', 'would i', 'is there',
+            'are there', 'tell me', 'show me', 'explain',
+        ])
+        or any(kw in msg_lower for kw in [
+            'eligible', 'qualify', 'pathway', 'document', 'calculate',
+            'crs', 'score', 'option', 'program', 'stream', 'apply',
+        ])
+    )
+
+
+def _trim_conv_history(history: list[dict], max_messages: int = MAX_HISTORY_MESSAGES) -> list[dict]:
+    if len(history) <= max_messages:
+        return history
+    return history[-max_messages:]
+
+
+def _append_conv_history(data: dict, role: str, content: str) -> list[dict]:
+    history: list[dict] = data.setdefault("conv_history", [])
+    history.append({"role": role, "content": content})
+    data["conv_history"] = _trim_conv_history(history)
+    return data["conv_history"]
+
+
+def _build_pipeline_query(data: dict, message: str, was_ready_before: bool) -> str:
+    if was_ready_before:
+        if _contains_new_question(message):
+            data["current_question"] = message
+        return data.get("current_question") or data["original_query"] or message
+    pipeline_query = data["original_query"] or message
+    if pipeline_query:
+        data["current_question"] = pipeline_query
+    return pipeline_query
+
+
+def _ensure_turn_ready(turn, data: dict, session, message: str, profile_overrides: dict | None) -> None:
+    """Apply profile overrides + intake bypass rules before pipeline call."""
+    if profile_overrides:
+        from src.schemas import IntakeProfile
+        from src.intake import assess_completeness, IntakeMode, ConversationState
+        d = session.profile.model_dump()
+        d.update(profile_overrides)
+        session.profile = IntakeProfile(**d)
+        completeness = assess_completeness(session.profile)
+        if completeness.mode in (IntakeMode.FULL_MATCHING, IntakeMode.LOW_CONFIDENCE):
+            if session.state.value not in ("ready_to_match", "matching_done", "low_confidence_match"):
+                session.state = ConversationState.READY_TO_MATCH
+            if not turn.ready_for_retrieval:
+                turn.ready_for_retrieval = True
+                turn.agent_message = ""
+        elif completeness.mode == IntakeMode.DATA_COLLECTION and not turn.ready_for_retrieval:
+            turn.agent_message = _build_collecting_message_from_profile(session.profile)
+
+    # Bypass profile gate for factual / general / calculate / L3 requests.
+    if not turn.ready_for_retrieval:
+        from src.agent_module import detect_intent, is_l3_query, INTENT_QA, INTENT_GENERAL, INTENT_CALCULATE
+        _orig = data["original_query"] or message
+        _intent = detect_intent(_orig)
+        if _intent in (INTENT_QA, INTENT_GENERAL, INTENT_CALCULATE) or is_l3_query(_orig):
+            turn.ready_for_retrieval = True
+            turn.agent_message = ""
+
+
+def _bootstrap_chat_turn(session_id: str, message: str, profile_overrides: dict | None) -> ChatTurnContext:
+    if not _store.exists(session_id):
+        raise KeyError("session_not_found")
+
+    data = _store.get(session_id)
+    machine = data["machine"]
+    session = data["session"]
+
+    if data["original_query"] is None:
+        data["original_query"] = message
+
+    was_ready_before = session.state.value in ("ready_to_match", "matching_done", "low_confidence_match")
+    profile_before = session.profile.model_dump()
+    turn = machine.process_turn(session, message)
+    profile_after = session.profile.model_dump()
+    extracted_fields = {k: v for k, v in profile_after.items() if v is not None and v != profile_before.get(k)}
+
+    _ensure_turn_ready(turn, data, session, message, profile_overrides or {})
+    base_meta = {
+        "session_id": session_id,
+        "state": session.state.value,
+        "profile": _profile_summary(session.profile),
+        "ready_for_retrieval": turn.ready_for_retrieval,
+        "action_route": turn.action_route.value if turn.action_route else None,
+        "extracted_fields": extracted_fields,
+    }
+    return ChatTurnContext(
+        session_id=session_id,
+        data=data,
+        session=session,
+        turn=turn,
+        message=message,
+        was_ready_before=was_ready_before,
+        extracted_fields=extracted_fields,
+        base_meta=base_meta,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Routes — Static files
 # ---------------------------------------------------------------------------
@@ -248,142 +400,49 @@ def chat():
     session_id = body.get("session_id", "")
     message = body.get("message", "").strip()
 
-    if not _store.exists(session_id):
-        return jsonify({"error": "Session not found. Please refresh and start over."}), 404
-
     if not message:
         return jsonify({"error": "Empty message."}), 400
 
-    data = _store.get(session_id)
-    machine = data["machine"]
-    session = data["session"]
-
-    # ── Run intake turn ──────────────────────────────────────────────────────
-    # Save the very first user message as the original question.
-    # Intake answers ("No job offer", "I am 27") are not questions —
-    # routing detect_intent() on them gives the wrong action type.
-    if data["original_query"] is None:
-        data["original_query"] = message
-
-    # Snapshot state BEFORE process_turn to detect the ready transition.
-    # This must happen before form overrides so that form-driven state changes
-    # don't affect the first-message routing logic.
-    was_ready_before = session.state.value in (
-        "ready_to_match", "matching_done", "low_confidence_match"
-    )
-
-    # Snapshot profile before conversation extraction (for P2: extracted_fields diff)
-    profile_before_intake = session.profile.model_dump()
-
-    turn = machine.process_turn(session, message)
-
-    # ── Compute conversation-extracted fields (for frontend form sync) ────────
-    profile_after_intake = session.profile.model_dump()
-    extracted_fields = {
-        k: v for k, v in profile_after_intake.items()
-        if v is not None and v != profile_before_intake.get(k)
-    }
-
-    # ── Apply profile overrides from the frontend form ───────────────────────
-    # Applied AFTER process_turn so form-set values always win over conversation
-    # extraction. Blank form fields (not sent by frontend) leave conversation
-    # values untouched.
-    profile_overrides = {k: v for k, v in (body.get("profile_overrides") or {}).items()
-                         if v is not None and v != ""}
-    if profile_overrides:
-        from src.schemas import IntakeProfile
-        d = session.profile.model_dump()
-        d.update(profile_overrides)
-        session.profile = IntakeProfile(**d)
-
-        # If required fields are now filled, skip intake collection entirely
-        from src.intake import assess_completeness, IntakeMode, ConversationState
-        completeness = assess_completeness(session.profile)
-        if completeness.mode in (IntakeMode.FULL_MATCHING, IntakeMode.LOW_CONFIDENCE):
-            if session.state.value not in ("ready_to_match", "matching_done", "low_confidence_match"):
-                session.state = ConversationState.READY_TO_MATCH
-            # Propagate readiness to the current turn so the intake question is
-            # not shown when the sidebar form already has the required fields.
-            if not turn.ready_for_retrieval:
-                turn.ready_for_retrieval = True
-                turn.agent_message = ""
-        elif completeness.mode == IntakeMode.DATA_COLLECTION and not turn.ready_for_retrieval:
-            # Rebuild collecting prompt from updated profile so we don't ask for
-            # already-filled fields and we clearly show the 6/8 threshold.
-            turn.agent_message = _build_collecting_message_from_profile(session.profile)
-
-    # Bypass profile-collection gate for factual / general / L3 queries.
-    # These don't need personal profile fields — answer immediately without
-    # asking for age, education, etc.
-    if not turn.ready_for_retrieval:
-        from src.agent_module import (
-            detect_intent,   # keyword-only, no LLM — safe to call synchronously
-            is_l3_query,
-            INTENT_QA,
-            INTENT_GENERAL,
-            INTENT_CALCULATE,
-        )
-        _orig = data["original_query"] or message
-        _intent = detect_intent(_orig)   # fast keyword check, no LLM call
-        if _intent in (INTENT_QA, INTENT_GENERAL, INTENT_CALCULATE) or is_l3_query(_orig):
-            turn.ready_for_retrieval = True
-            turn.agent_message = ""  # suppress the profile-collection prompt
+    profile_overrides = {k: v for k, v in (body.get("profile_overrides") or {}).items() if v is not None and v != ""}
+    try:
+        ctx = _bootstrap_chat_turn(session_id, message, profile_overrides)
+    except KeyError:
+        return jsonify({"error": "Session not found. Please refresh and start over."}), 404
+    except Exception as exc:
+        return jsonify({"error": f"Processing error: {exc}"}), 500
 
     base = {
         "session_id": session_id,
-        "state": session.state.value,
-        "profile": _profile_summary(session.profile),
-        "ready_for_retrieval": turn.ready_for_retrieval,
-        "action_route": turn.action_route.value if turn.action_route else None,
-        "confidence_warning": turn.confidence_warning or "",
-        "extracted_fields": extracted_fields,
+        "state": ctx.session.state.value,
+        "profile": _profile_summary(ctx.session.profile),
+        "ready_for_retrieval": ctx.turn.ready_for_retrieval,
+        "action_route": ctx.turn.action_route.value if ctx.turn.action_route else None,
+        "confidence_warning": ctx.turn.confidence_warning or "",
+        "extracted_fields": ctx.extracted_fields,
     }
 
-    if not turn.ready_for_retrieval:
+    if not ctx.turn.ready_for_retrieval:
         # ── Intake still collecting ──────────────────────────────────────────
         base["type"] = "collecting"
-        base["agent_message"] = turn.agent_message
+        base["agent_message"] = ctx.turn.agent_message
         return jsonify(base)
 
     # ── Ready — run the full pipeline ────────────────────────────────────────
     try:
         from src.orchestrator import run_pipeline
-        # Determine the query to pass to the pipeline.
-        if was_ready_before:
-            msg_lower = message.lower()
-            is_new_question = (
-                '?' in message
-                or any(msg_lower.startswith(w) for w in [
-                    'what', 'how', 'which', 'why', 'when', 'where', 'who',
-                    'am i', 'can i', 'do i', 'will i', 'would i', 'is there',
-                    'are there', 'tell me', 'show me', 'explain',
-                ])
-                or any(kw in msg_lower for kw in [
-                    'eligible', 'qualify', 'pathway', 'document', 'calculate',
-                    'crs', 'score', 'option', 'program', 'stream', 'apply',
-                ])
-            )
-            if is_new_question:
-                data["current_question"] = message
-            pipeline_query = data.get("current_question") or data["original_query"] or message
-        else:
-            pipeline_query = data["original_query"] or message
-            if pipeline_query:
-                data["current_question"] = pipeline_query
-        session.profile.query = pipeline_query
+        pipeline_query = _build_pipeline_query(ctx.data, ctx.message, ctx.was_ready_before)
+        ctx.pipeline_query = pipeline_query
+        ctx.session.profile.query = pipeline_query
+        conv_history = _append_conv_history(ctx.data, "user", pipeline_query)
 
-        # Append this user turn to conversation history before calling pipeline
-        conv_history: list[dict] = data.setdefault("conv_history", [])
-        conv_history.append({"role": "user", "content": pipeline_query})
-
-        answer = run_pipeline(session.profile, conv_history=conv_history)
+        answer = run_pipeline(ctx.session.profile, conv_history=conv_history)
 
         # Append assistant answer to history (plain text, no citations)
         clean_answer = _clean_answer_text(answer.answer)
-        conv_history.append({"role": "assistant", "content": clean_answer})
+        _append_conv_history(ctx.data, "assistant", clean_answer)
 
         base["type"] = "answer"
-        base["agent_message"] = turn.agent_message  # acknowledgment / transition msg
+        base["agent_message"] = ctx.turn.agent_message  # acknowledgment / transition msg
         base["answer"] = clean_answer
         base["risk_level"] = answer.risk_level.value
         base["action_type"] = answer.action_type.value if answer.action_type else None
@@ -421,109 +480,32 @@ def chat_stream():
     session_id = body.get("session_id", "")
     message = body.get("message", "").strip()
 
-    if not _store.exists(session_id):
-        def _err():
-            yield f"data: {json.dumps({'type':'error','message':'Session not found. Please refresh.'})}\n\n"
-        return Response(stream_with_context(_err()), mimetype="text/event-stream")
-
     if not message:
         def _err2():
             yield f"data: {json.dumps({'type':'error','message':'Empty message.'})}\n\n"
         return Response(stream_with_context(_err2()), mimetype="text/event-stream")
 
     try:
-        data = _store.get(session_id)
-        machine = data["machine"]
-        session = data["session"]
+        profile_overrides = {k: v for k, v in (body.get("profile_overrides") or {}).items() if v is not None and v != ""}
+        ctx = _bootstrap_chat_turn(session_id, message, profile_overrides)
+    except KeyError:
+        def _err():
+            yield f"data: {json.dumps({'type':'error','message':'Session not found. Please refresh.'})}\n\n"
+        return Response(stream_with_context(_err()), mimetype="text/event-stream")
     except Exception as _exc:
         def _setup_err(_m=str(_exc)):
-            yield f"data: {json.dumps({'type':'error','message':f'Session error: {_m}'})}\n\n"
+            yield f"data: {json.dumps({'type':'error','message':f'Processing error: {_m}'})}\n\n"
         return Response(stream_with_context(_setup_err()), mimetype="text/event-stream")
 
-    if data["original_query"] is None:
-        data["original_query"] = message
-
-    was_ready_before = session.state.value in (
-        "ready_to_match", "matching_done", "low_confidence_match"
-    )
-    profile_before = session.profile.model_dump()
-    try:
-        turn = machine.process_turn(session, message)
-    except Exception as _exc:
-        def _turn_err(_m=str(_exc)):
-            yield f"data: {json.dumps({'type':'error','message':f'Processing error: {_m}'})}\n\n"
-        return Response(stream_with_context(_turn_err()), mimetype="text/event-stream")
-    profile_after = session.profile.model_dump()
-    extracted_fields = {
-        k: v for k, v in profile_after.items()
-        if v is not None and v != profile_before.get(k)
-    }
-
-    profile_overrides = {k: v for k, v in (body.get("profile_overrides") or {}).items()
-                         if v is not None and v != ""}
-    if profile_overrides:
-        from src.schemas import IntakeProfile as _IP
-        d = session.profile.model_dump()
-        d.update(profile_overrides)
-        session.profile = _IP(**d)
-        from src.intake import assess_completeness, IntakeMode, ConversationState
-        completeness = assess_completeness(session.profile)
-        if completeness.mode in (IntakeMode.FULL_MATCHING, IntakeMode.LOW_CONFIDENCE):
-            if session.state.value not in ("ready_to_match", "matching_done", "low_confidence_match"):
-                session.state = ConversationState.READY_TO_MATCH
-            if not turn.ready_for_retrieval:
-                turn.ready_for_retrieval = True
-                turn.agent_message = ""
-        elif completeness.mode == IntakeMode.DATA_COLLECTION and not turn.ready_for_retrieval:
-            turn.agent_message = _build_collecting_message_from_profile(session.profile)
-
-    if not turn.ready_for_retrieval:
-        from src.agent_module import detect_intent, is_l3_query, INTENT_QA, INTENT_GENERAL, INTENT_CALCULATE
-        _orig = data["original_query"] or message
-        _intent = detect_intent(_orig)   # keyword-only, no LLM
-        if _intent in (INTENT_QA, INTENT_GENERAL, INTENT_CALCULATE) or is_l3_query(_orig):
-            turn.ready_for_retrieval = True
-            turn.agent_message = ""
-
-    base_meta = {
-        "session_id": session_id,
-        "state": session.state.value,
-        "profile": _profile_summary(session.profile),
-        "ready_for_retrieval": turn.ready_for_retrieval,
-        "action_route": turn.action_route.value if turn.action_route else None,
-        "extracted_fields": extracted_fields,
-    }
-
-    if not turn.ready_for_retrieval:
+    if not ctx.turn.ready_for_retrieval:
         def _collecting():
-            yield f"data: {json.dumps({'type':'collecting','agent_message':turn.agent_message,**base_meta})}\n\n"
+            yield f"data: {json.dumps({'type':'collecting','agent_message':ctx.turn.agent_message,**ctx.base_meta})}\n\n"
         return Response(stream_with_context(_collecting()), mimetype="text/event-stream")
 
-    # Determine pipeline query
-    if was_ready_before:
-        msg_lower = message.lower()
-        is_new_question = (
-            '?' in message
-            or any(msg_lower.startswith(w) for w in [
-                'what','how','which','why','when','where','who',
-                'am i','can i','do i','will i','would i','is there',
-                'are there','tell me','show me','explain',
-            ])
-            or any(kw in msg_lower for kw in [
-                'eligible','qualify','pathway','document','calculate',
-                'crs','score','option','program','stream','apply',
-            ])
-        )
-        if is_new_question:
-            data["current_question"] = message
-        pipeline_query = data.get("current_question") or data["original_query"] or message
-    else:
-        pipeline_query = data["original_query"] or message
-        data["current_question"] = pipeline_query
-    session.profile.query = pipeline_query
-
-    conv_history: list[dict] = data.setdefault("conv_history", [])
-    conv_history.append({"role": "user", "content": pipeline_query})
+    pipeline_query = _build_pipeline_query(ctx.data, ctx.message, ctx.was_ready_before)
+    ctx.pipeline_query = pipeline_query
+    ctx.session.profile.query = pipeline_query
+    conv_history = _append_conv_history(ctx.data, "user", pipeline_query)
 
     def _generate():
         from src import agent_module, policy_tool_module, retrieval_module
@@ -539,17 +521,17 @@ def chat_stream():
 
             if agent_module.is_l3_query(pipeline_query):
                 refusal = agent_module.get_l3_refusal()
-                conv_history.append({"role": "assistant", "content": refusal})
-                yield f"data: {json.dumps({'type':'done','answer':refusal,'citations':[],'risk_level':'L3','action_type':None,'confidence_warning':'','retry_count':0,**base_meta})}\n\n"
+                _append_conv_history(ctx.data, "assistant", refusal)
+                yield f"data: {json.dumps({'type':'done','answer':refusal,'citations':[],'risk_level':'L3','action_type':None,'confidence_warning':'','retry_count':0,**ctx.base_meta})}\n\n"
                 return
 
             # Step 2: retrieval
             if intent in (agent_module.INTENT_MATCH, agent_module.INTENT_VISUALIZE):
                 rr = RetrievalRequest(
                     query=pipeline_query,
-                    province=session.profile.province,
-                    program=session.profile.program,
-                    stream=session.profile.stream,
+                    province=ctx.session.profile.province,
+                    program=ctx.session.profile.program,
+                    stream=ctx.session.profile.stream,
                 )
             else:
                 rr = RetrievalRequest(query=pipeline_query)
@@ -559,13 +541,13 @@ def chat_stream():
             tool_results = []
             if intent == agent_module.INTENT_CALCULATE:
                 required = ["age_band","education_level","language_score","canadian_work_months"]
-                if sum(1 for f in required if getattr(session.profile, f, None) is not None) >= 3:
+                if sum(1 for f in required if getattr(ctx.session.profile, f, None) is not None) >= 3:
                     tool_results.append(policy_tool_module.run_tool(
-                        ToolRequest(tool_name="crs_calculator", parameters=session.profile.model_dump())
+                        ToolRequest(tool_name="crs_calculator", parameters=ctx.session.profile.model_dump())
                     ))
             elif intent == agent_module.INTENT_VISUALIZE:
                 tool_results.append(policy_tool_module.run_tool(
-                    ToolRequest(tool_name="pathway_backbone", parameters=session.profile.model_dump())
+                    ToolRequest(tool_name="pathway_backbone", parameters=ctx.session.profile.model_dump())
                 ))
 
             # Retry if no results
@@ -574,13 +556,13 @@ def chat_stream():
 
             # Step 4: risk routing
             risk_level, risk_explain = agent_module.route_risk_with_explain(
-                session.profile, results, user_text=pipeline_query
+                ctx.session.profile, results, user_text=pipeline_query
             )
 
             # Step 5: prepare stream context
             early_answer, messages, citations, confidence_warning, action_type = \
                 agent_module.prepare_stream_context(
-                    session.profile, results, tool_results, risk_level,
+                    ctx.session.profile, results, tool_results, risk_level,
                     user_text=pipeline_query,
                     risk_explain=risk_explain,
                     intent_scores=intent_scores,
@@ -592,8 +574,8 @@ def chat_stream():
             # Early return for L3 / no-evidence
             if early_answer is not None:
                 clean = _clean_answer_text(early_answer.answer)
-                conv_history.append({"role": "assistant", "content": clean})
-                yield f"data: {json.dumps({'type':'done','answer':clean,'citations':[],'risk_level':risk_level.value,'action_type':action_type.value if action_type else None,'confidence_warning':confidence_warning,'retry_count':0,**base_meta})}\n\n"
+                _append_conv_history(ctx.data, "assistant", clean)
+                yield f"data: {json.dumps({'type':'done','answer':clean,'citations':[],'risk_level':risk_level.value,'action_type':action_type.value if action_type else None,'confidence_warning':confidence_warning,'retry_count':0,**ctx.base_meta})}\n\n"
                 return
 
             # Step 6: stream LLM tokens
@@ -604,10 +586,10 @@ def chat_stream():
                 yield f"data: {json.dumps({'type':'token','content':token})}\n\n"
 
             answer_text = _clean_answer_text("".join(full_text))
-            conv_history.append({"role": "assistant", "content": answer_text})
+            _append_conv_history(ctx.data, "assistant", answer_text)
 
             citations_data = [c.model_dump() for c in citations]
-            yield f"data: {json.dumps({'type':'done','answer':answer_text,'citations':citations_data,'risk_level':risk_level.value,'action_type':action_type.value if action_type else None,'confidence_warning':confidence_warning,'retry_count':0,**base_meta})}\n\n"
+            yield f"data: {json.dumps({'type':'done','answer':answer_text,'citations':citations_data,'risk_level':risk_level.value,'action_type':action_type.value if action_type else None,'confidence_warning':confidence_warning,'retry_count':0,**ctx.base_meta})}\n\n"
 
         except Exception as exc:
             yield f"data: {json.dumps({'type':'error','message':str(exc)})}\n\n"
@@ -643,6 +625,7 @@ def get_session(session_id: str):
 @app.route("/api/status", methods=["GET"])
 def status():
     """Check whether the ChromaDB retrieval index is built and populated."""
+    _store.prune_expired()
     from pathlib import Path as _Path
     chroma_dir  = _Path(__file__).resolve().parent.parent / "chroma_db"
     chunks_file = _Path(__file__).resolve().parent.parent / "data" / "processed" / "chunks.jsonl"

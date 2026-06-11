@@ -64,7 +64,7 @@
       --radius-pill: 999px;
       --ease:      cubic-bezier(.2,0,0,1);   /* Material standard easing */
       --transition: 200ms cubic-bezier(.2,0,0,1);
-      --content-max: 1100px;                 /* readable conversation column width */
+      --content-max: min(1500px, 94vw);      /* adaptive conversation width on large screens */
     }
 
     html, body {
@@ -89,6 +89,7 @@
       display: inline-block;
       white-space: nowrap;
       direction: ltr;
+      font-feature-settings: 'liga';
       -webkit-font-feature-settings: 'liga';
       -webkit-font-smoothing: antialiased;
       font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
@@ -279,6 +280,7 @@
       background: var(--surface);  /* White, like Canada.ca content area */
     }
 
+    .home-header,
     .chat-header {
       padding: 0 24px;
       height: 64px;
@@ -288,6 +290,30 @@
       align-items: center;
       justify-content: space-between;
       flex-shrink: 0;
+    }
+    .home-header {
+      display: flex;
+    }
+    .chat-header {
+      display: none;
+    }
+
+    .home-brand {
+      font-family: 'Roboto', sans-serif;
+      font-size: 18px;
+      font-weight: 500;
+      color: var(--ink);
+      letter-spacing: -0.01em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .home-subtitle {
+      font-size: 12.5px;
+      color: var(--ink-lt);
+      margin-left: 10px;
+      font-weight: 400;
     }
 
     .chat-title {
@@ -333,7 +359,7 @@
       flex: 1;
       overflow-y: auto;
       padding: 32px 24px;
-      display: flex;
+      display: none;
       flex-direction: column;
       gap: 28px;
       max-width: 100%;
@@ -709,6 +735,14 @@
     }
 
     /* ── Welcome screen ──────────────────────────────────────────── */
+    .dashboard {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      background: var(--surface);
+    }
+
     .welcome {
       flex: 1;
       display: flex;
@@ -719,7 +753,8 @@
       padding: 48px 24px;
       gap: 0;
       overflow-y: auto;
-      max-width: 920px;
+      width: 100%;
+      max-width: min(1320px, 100%);
       margin: 0 auto;
     }
 
@@ -793,6 +828,10 @@
     }
     .welcome-btn.primary:hover { background: var(--c-red-dk); border-color: var(--c-red-dk); box-shadow: var(--shadow-sm); }
     .welcome-btn.primary:active { transform: scale(.98); }
+    .welcome-btn:focus-visible {
+      outline: 2px solid var(--c-red);
+      outline-offset: 2px;
+    }
 
     .welcome-btn.secondary {
       background: var(--surface);
@@ -805,12 +844,16 @@
       display: grid;
       grid-template-columns: repeat(2, 1fr);
       gap: 12px;
-      max-width: 720px;
+      max-width: min(1200px, 100%);
       width: 100%;
       margin-bottom: 28px;
     }
 
     .action-card {
+      appearance: none;
+      font-family: 'Roboto', sans-serif;
+      font-size: 14px;
+      width: 100%;
       padding: 18px 20px;
       background: var(--surface);
       border: 1px solid var(--border-lt);
@@ -829,6 +872,11 @@
     .action-card.loading .action-card-title::after {
       content: ' …';
       animation: dotPulse .9s infinite;
+    }
+    .action-card:focus-visible {
+      outline: 2px solid var(--c-red);
+      outline-offset: 2px;
+      border-color: var(--c-red);
     }
     @keyframes dotPulse { 0%,100%{opacity:1;} 50%{opacity:.3;} }
 
@@ -914,6 +962,35 @@
     }
     .restart-btn .msym { font-size:16px; }
     .restart-btn:hover { background:var(--surface-2); border-color:var(--border); color:var(--ink); }
+    .restart-btn:focus-visible {
+      outline: 2px solid var(--c-red);
+      outline-offset: 2px;
+    }
+
+    .mobile-profile-btn {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-pill);
+      background: var(--surface);
+      color: var(--ink-lt);
+      font-size: 12px;
+      font-weight: 500;
+      font-family: 'Roboto', sans-serif;
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+    .mobile-profile-btn:hover { background: var(--surface-2); color: var(--ink); }
+
+    .mobile-profile-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(32,33,36,.36);
+      z-index: 110;
+    }
     .collecting-card {
       background:var(--surface); border:1px solid var(--border);
       border-left: 3px solid var(--gc-blue);
@@ -1309,7 +1386,21 @@
 
     /* ── Responsive ─────────────────────────────────────────────── */
     @media (max-width: 720px) {
-      .sidebar { display: none; }
+      .sidebar {
+        display: flex;
+        position: fixed;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: min(340px, 86vw);
+        z-index: 120;
+        transform: translateX(-100%);
+        transition: transform .24s var(--ease);
+        box-shadow: var(--shadow-lg);
+      }
+      body.mobile-profile-open .sidebar { transform: translateX(0); }
+      body.mobile-profile-open .mobile-profile-backdrop { display: block; }
+      .mobile-profile-btn { display: inline-flex; }
       .welcome-title { font-size: 21px; }
       .welcome-hero { height: 200px; }
       .action-cards { grid-template-columns: 1fr; max-width: 340px; }
@@ -1552,13 +1643,25 @@
     </div>
   </aside>
 
+  <div class="mobile-profile-backdrop" id="mobileProfileBackdrop" onclick="closeMobileProfile()"></div>
+
   <!-- ── Main chat ─────────────────────────────────────────────── -->
   <main class="main">
-    <div class="chat-header">
+    <div class="home-header" id="homeHeader">
+      <div class="home-brand">
+        <span class="msym" style="font-size:20px;color:var(--c-red);">explore</span>
+        Canada PR Navigator
+        <span class="home-subtitle">Dashboard</span>
+      </div>
+      <button class="mobile-profile-btn" id="mobileProfileBtn" onclick="toggleMobileProfile()">
+        <span class="msym" style="font-size:16px;">tune</span>
+        Profile
+      </button>
+    </div>
+    <div class="chat-header" id="chatHeader">
       <div class="chat-title">
         <div class="chat-title-flag"></div>
         Canada PR Navigator
-        <span class="chat-title-sub">IRCC &amp; OINP official sources</span>
       </div>
       <div style="display:flex;align-items:center;gap:10px;">
         <button class="restart-btn" onclick="openPathwayPanel()"><span class="msym">map</span> Pathway Map</button>
@@ -1574,9 +1677,7 @@
       <span id="statusBannerText">Checking retrieval index&#8230;</span>
     </div>
 
-    <div class="messages" id="messages">
-
-      <!-- Welcome screen (shown before session starts) -->
+    <div class="dashboard" id="dashboardScreen">
       <div class="welcome" id="welcomeScreen">
         <div class="welcome-icon">
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -1589,26 +1690,26 @@
           Get clear, well-cited answers about your immigration options, drawn from the latest official IRCC and OINP policies.
         </p>
         <div class="action-cards">
-          <div class="action-card" onclick="showPathwayMapNow()">
+          <button type="button" class="action-card" onclick="showPathwayMapNow()">
             <div class="action-card-emoji"><span class="msym">map</span></div>
             <div class="action-card-title">See all PR pathways</div>
             <div class="action-card-desc">Visual map of every federal & provincial route to permanent residence</div>
-          </div>
-          <div class="action-card" onclick="startWithPrompt('Which immigration programs am I eligible for based on my background?', this)">
+          </button>
+          <button type="button" class="action-card" onclick="startWithPrompt('Which immigration programs am I eligible for based on my background?', this)">
             <div class="action-card-emoji"><span class="msym">checklist</span></div>
             <div class="action-card-title">What programs can I apply to?</div>
             <div class="action-card-desc">Find out which PR programs match your education, work, and language profile</div>
-          </div>
-          <div class="action-card" onclick="startWithPrompt('What is my CRS score and how can I improve it?', this)">
+          </button>
+          <button type="button" class="action-card" onclick="startWithPrompt('What is my CRS score and how can I improve it?', this)">
             <div class="action-card-emoji"><span class="msym">calculate</span></div>
             <div class="action-card-title">Calculate my CRS score</div>
             <div class="action-card-desc">Estimate your Express Entry points and see how to improve your ranking</div>
-          </div>
-          <div class="action-card" onclick="startWithPrompt('What documents do I need to apply for Canadian permanent residence?', this)">
+          </button>
+          <button type="button" class="action-card" onclick="startWithPrompt('What documents do I need to apply for Canadian permanent residence?', this)">
             <div class="action-card-emoji"><span class="msym">description</span></div>
             <div class="action-card-title">What documents do I need?</div>
             <div class="action-card-desc">Get a step-by-step list of required documents for your application</div>
-          </div>
+          </button>
         </div>
         <p class="welcome-or-text">— or just type your question below —</p>
         <div class="welcome-actions">
@@ -1616,6 +1717,8 @@
         </div>
       </div>
     </div>
+
+    <div class="messages" id="messages"></div>
 
     <!-- Input area -->
     <div class="input-area" id="inputArea" style="display:none;">
@@ -1681,6 +1784,23 @@ let isWaiting      = false;
 let _sessionPromise = null;   // resolves when /api/session is ready
 let _greetingMsg   = null;   // cached greeting from pre-warm
 
+function setAppMode(mode) {
+  const isChat = mode === 'chat';
+  document.getElementById('homeHeader').style.display      = isChat ? 'none' : 'flex';
+  document.getElementById('chatHeader').style.display      = isChat ? 'flex' : 'none';
+  document.getElementById('dashboardScreen').style.display = isChat ? 'none' : '';
+  document.getElementById('messages').style.display        = isChat ? 'flex' : 'none';
+  document.getElementById('inputArea').style.display       = isChat ? 'block' : 'none';
+}
+
+function toggleMobileProfile() {
+  document.body.classList.toggle('mobile-profile-open');
+}
+
+function closeMobileProfile() {
+  document.body.classList.remove('mobile-profile-open');
+}
+
 const ACTION_LABELS = {
   action_1: { text: 'Pathway Overview',   cls: 'badge-action1' },
   action_2: { text: 'Eligibility Check',  cls: 'badge-action2' },
@@ -1715,10 +1835,10 @@ async function _prewarmSession() {
 
 async function initSession(initialMsg) {
   /* 1. Immediately switch UI — no waiting, card feels responsive. */
-  document.getElementById('welcomeScreen').style.display = 'none';
-  document.getElementById('inputArea').style.display     = 'block';
-  document.getElementById('userInput').disabled          = false;
-  document.getElementById('sendBtn').disabled            = false;
+  closeMobileProfile();
+  setAppMode('chat');
+  document.getElementById('userInput').disabled            = false;
+  document.getElementById('sendBtn').disabled              = false;
   setStatus('connecting', 'Connecting…');
 
   try {
@@ -2480,10 +2600,10 @@ async function restartSession() {
   isWaiting = false;
   _greetingMsg = null;
 
-  /* Show the welcome screen again, hide the input area. */
-  document.getElementById('welcomeScreen').style.display = '';
-  document.getElementById('inputArea').style.display     = 'none';
-  document.getElementById('restartBtn').style.display    = 'none';
+  /* Return to dashboard mode (welcome only), hide chat transcript/input. */
+  closeMobileProfile();
+  setAppMode('home');
+  document.getElementById('restartBtn').style.display      = 'none';
   setStatus('connecting', 'Starting new chat…');
 
   /* Create a fresh backend session in the background (profile is preserved
@@ -2519,12 +2639,17 @@ async function checkStatus() {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
+  setAppMode('home');
   checkStatus();
   loadProfileFromStorage();
   /* Pre-create session immediately so card clicks feel instant. */
   _sessionPromise = _prewarmSession();
   /* Rotate input placeholder to show example questions */
   _startPlaceholderRotation();
+});
+
+window.addEventListener('resize', () => {
+  if (window.innerWidth > 720) closeMobileProfile();
 });
 
 function _startPlaceholderRotation() {
