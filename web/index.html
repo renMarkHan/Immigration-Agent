@@ -64,6 +64,7 @@
       --radius-pill: 999px;
       --ease:      cubic-bezier(.2,0,0,1);   /* Material standard easing */
       --transition: 200ms cubic-bezier(.2,0,0,1);
+      --content-max: 1100px;                 /* readable conversation column width */
     }
 
     html, body {
@@ -351,7 +352,7 @@
       align-items: flex-start;
       animation: msgIn .3s var(--ease) both;
       width: 100%;
-      max-width: 860px;
+      max-width: var(--content-max);
       margin: 0 auto;
     }
 
@@ -385,7 +386,7 @@
       font-size: 15px;
     }
 
-    .msg-body { max-width: 720px; }
+    .msg-body { flex: 1; min-width: 0; max-width: none; }
     .msg-row.user .msg-body { display: flex; flex-direction: column; align-items: flex-end; }
 
     .msg-bubble {
@@ -622,7 +623,7 @@
       display: flex;
       gap: 8px;
       align-items: flex-end;
-      max-width: 860px;
+      max-width: var(--content-max);
       margin: 0 auto;
       background: var(--surface);
       border: 1px solid var(--border);
@@ -674,7 +675,7 @@
       font-size: 12px;
       color: var(--ink-xs);
       margin: 8px auto 0;
-      max-width: 860px;
+      max-width: var(--content-max);
       text-align: center;
     }
 
@@ -684,7 +685,7 @@
       gap: 8px;
       flex-wrap: wrap;
       margin: 0 auto 12px;
-      max-width: 860px;
+      max-width: var(--content-max);
       justify-content: center;
     }
 
@@ -718,7 +719,7 @@
       padding: 48px 24px;
       gap: 0;
       overflow-y: auto;
-      max-width: 760px;
+      max-width: 920px;
       margin: 0 auto;
     }
 
@@ -804,7 +805,7 @@
       display: grid;
       grid-template-columns: repeat(2, 1fr);
       gap: 12px;
-      max-width: 560px;
+      max-width: 720px;
       width: 100%;
       margin-bottom: 28px;
     }
@@ -1801,7 +1802,7 @@ async function sendMessage() {
     row.className = 'msg-row stream-row';
     row.innerHTML = `
       <div class="msg-avatar agent"><span class="msym">explore</span></div>
-      <div class="msg-body" style="max-width:720px;width:100%;">
+      <div class="msg-body" style="width:100%;">
         <div class="msg-bubble agent-bubble stream-bubble">
           <span class="stream-content"></span><span class="stream-cursor">▋</span>
         </div>
@@ -1950,7 +1951,7 @@ function appendAnswer(data) {
 
   row.innerHTML = `
     <div class="msg-avatar agent"><span class="msym">explore</span></div>
-    <div class="msg-body" style="max-width:720px;width:100%;">
+    <div class="msg-body" style="width:100%;">
       <div class="answer-card">
         <div class="answer-meta">${metaBadges}</div>
         <div class="answer-body">${renderMarkdown(data.answer)}</div>
@@ -2411,7 +2412,7 @@ function appendGreeting(text) {
   row.className = 'msg-row';
   row.innerHTML = `
     <div class="msg-avatar agent"><span class="msym">explore</span></div>
-    <div class="msg-body" style="max-width:680px;">
+    <div class="msg-body" style="width:100%;">
       <div class="msg-bubble agent-bubble" style="border-left:3px solid var(--forest-lt);">
         ${escHtml(text)}
       </div>
@@ -2433,7 +2434,7 @@ function appendCollectingCard(text, data) {
   row.className = 'msg-row';
   row.innerHTML = `
     <div class="msg-avatar agent"><span class="msym">explore</span></div>
-    <div class="msg-body" style="max-width:680px;width:100%;">
+    <div class="msg-body" style="width:100%;">
       <div class="collecting-card">
         <div class="collecting-header">
           <div class="collecting-pulse"></div>
