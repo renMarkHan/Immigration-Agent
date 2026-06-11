@@ -14,13 +14,13 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      /* Google Material design language — single blue accent, neutral grays */
-      --g-blue:    #1a73e8;   /* Google primary blue */
-      --g-blue-dk: #1765cc;
-      --g-blue-lt: #4285f4;
-      --g-blue-50: #e8f0fe;   /* tinted blue surface */
+      /* Government of Canada design language — flag red accent, white/neutral grays */
+      --c-red:    #d52b1e;   /* Canadian flag red (Pantone 032) */
+      --c-red-dk: #b81e13;   /* darker red for hover/pressed */
+      --c-red-lt: #e84c3d;   /* lighter red */
+      --c-red-50: #fce8e6;   /* tinted red surface */
       --g-green:   #1e8e3e;
-      --g-red:     #d93025;
+      --g-red:     #d52b1e;
       --g-yellow:  #f29900;
 
       /* Neutrals — Google surface scale */
@@ -38,16 +38,16 @@
       --navy:      #202124;
       --navy-lt:   #3c4043;
       --navy-dk:   #202124;
-      --red:       var(--g-blue);
-      --red-lt:    var(--g-blue-lt);
-      --red-dk:    var(--g-blue-dk);
-      --gc-blue:   var(--g-blue);
-      --gc-blue-lt:var(--g-blue-dk);
-      --forest:    var(--g-blue);
-      --forest-lt: var(--g-blue-lt);
-      --forest-dk: var(--g-blue-dk);
-      --maple:     var(--g-blue);
-      --maple-lt:  var(--g-blue-lt);
+      --red:       var(--c-red);
+      --red-lt:    var(--c-red-lt);
+      --red-dk:    var(--c-red-dk);
+      --gc-blue:   var(--c-red);
+      --gc-blue-lt:var(--c-red-dk);
+      --forest:    var(--c-red);
+      --forest-lt: var(--c-red-lt);
+      --forest-dk: var(--c-red-dk);
+      --maple:     var(--c-red);
+      --maple-lt:  var(--c-red-lt);
       --cream:     #ffffff;
       --cream-dk:  #f1f3f4;
       --white:     #ffffff;
@@ -137,8 +137,8 @@
     .logo-leaf {
       width: 30px; height: 30px;
       border-radius: 50%;
-      background: var(--g-blue-50);
-      color: var(--g-blue);
+      background: var(--c-red-50);
+      color: var(--c-red);
       clip-path: none;
       flex-shrink: 0;
       display: flex;
@@ -189,17 +189,17 @@
       display: flex;
       gap: 10px;
       align-items: flex-start;
-      background: var(--g-blue-50);
+      background: var(--c-red-50);
       border: none;
       border-radius: var(--radius);
       padding: 12px 14px;
       margin-bottom: 18px;
       font-size: 12.5px;
-      color: #174ea6;
+      color: var(--c-red-dk);
       line-height: 1.55;
     }
-    .sidebar-hint strong { color: #174ea6; font-weight: 500; }
-    .sidebar-hint-icon { flex-shrink: 0; font-size: 18px; margin-top: 0; color: var(--g-blue); }
+    .sidebar-hint strong { color: var(--c-red-dk); font-weight: 500; }
+    .sidebar-hint-icon { flex-shrink: 0; font-size: 18px; margin-top: 0; color: var(--c-red); }
 
     .field-row {
       display: flex;
@@ -264,7 +264,7 @@
 
     .progress-fill {
       height: 100%;
-      background: var(--g-blue);
+      background: var(--c-red);
       border-radius: var(--radius-pill);
       transition: width .4s var(--ease);
     }
@@ -374,8 +374,8 @@
     }
 
     .msg-avatar.agent {
-      background: var(--g-blue-50);
-      color: var(--g-blue);
+      background: var(--c-red-50);
+      color: var(--c-red);
     }
     .msg-avatar.agent .msym { font-size: 20px; }
 
@@ -404,7 +404,7 @@
     }
 
     .msg-bubble.user-bubble {
-      background: var(--g-blue);
+      background: var(--c-red);
       color: #fff;
       border-radius: var(--radius-lg) var(--radius-lg) 4px var(--radius-lg);
     }
@@ -442,7 +442,7 @@
     }
 
     .badge { font-family: 'Roboto', sans-serif; font-size: 11.5px; }
-    .badge-action1 { background: var(--g-blue-50); color: #1967d2; }
+    .badge-action1 { background: var(--c-red-50); color: var(--c-red-dk); }
     .badge-action2 { background: #e6f4ea; color: #188038; }
     .badge-action3 { background: #fef7e0; color: #b06000; }
     .badge-action4 { background: #f3e8fd; color: #8430ce; }
@@ -656,7 +656,7 @@
     .send-btn {
       width: 40px; height: 40px;
       flex-shrink: 0;
-      background: var(--g-blue);
+      background: var(--c-red);
       color: #fff;
       border: none;
       border-radius: 50%;
@@ -666,7 +666,7 @@
       justify-content: center;
       transition: background var(--transition), transform var(--transition), box-shadow var(--transition);
     }
-    .send-btn:hover:not(:disabled) { background: var(--g-blue-dk); box-shadow: var(--shadow-sm); }
+    .send-btn:hover:not(:disabled) { background: var(--c-red-dk); box-shadow: var(--shadow-sm); }
     .send-btn:active:not(:disabled) { transform: scale(.94); }
     .send-btn:disabled { background: var(--surface-3); color: var(--ink-xs); cursor: not-allowed; }
 
@@ -702,9 +702,9 @@
       text-decoration: none;
     }
     .quick-chip:hover {
-      background: var(--g-blue-50);
-      color: var(--g-blue-dk);
-      border-color: var(--g-blue-50);
+      background: var(--c-red-50);
+      color: var(--c-red-dk);
+      border-color: var(--c-red-50);
     }
 
     /* ── Welcome screen ──────────────────────────────────────────── */
@@ -733,15 +733,15 @@
     .welcome-icon {
       width: 64px; height: 64px;
       border-radius: 50%;
-      background: var(--g-blue-50);
-      color: var(--g-blue);
+      background: var(--c-red-50);
+      color: var(--c-red);
       display: flex;
       align-items: center;
       justify-content: center;
       margin-bottom: 24px;
     }
     .welcome-icon .msym { font-size: 32px; }
-    .welcome-icon svg { stroke: var(--g-blue); width: 30px; height: 30px; }
+    .welcome-icon svg { stroke: var(--c-red); width: 30px; height: 30px; }
 
     .welcome-title {
       font-family: 'Roboto', 'Google Sans', sans-serif;
@@ -785,20 +785,20 @@
     }
 
     .welcome-btn.primary {
-      background: var(--g-blue);
+      background: var(--c-red);
       color: #fff;
-      border: 1px solid var(--g-blue);
+      border: 1px solid var(--c-red);
       box-shadow: none;
     }
-    .welcome-btn.primary:hover { background: var(--g-blue-dk); border-color: var(--g-blue-dk); box-shadow: var(--shadow-sm); }
+    .welcome-btn.primary:hover { background: var(--c-red-dk); border-color: var(--c-red-dk); box-shadow: var(--shadow-sm); }
     .welcome-btn.primary:active { transform: scale(.98); }
 
     .welcome-btn.secondary {
       background: var(--surface);
-      color: var(--g-blue);
+      color: var(--c-red);
       border: 1px solid var(--border);
     }
-    .welcome-btn.secondary:hover { background: var(--g-blue-50); border-color: var(--g-blue-50); }
+    .welcome-btn.secondary:hover { background: var(--c-red-50); border-color: var(--c-red-50); }
 
     .action-cards {
       display: grid;
@@ -834,8 +834,8 @@
     .action-card-emoji {
       width: 40px; height: 40px;
       border-radius: 50%;
-      background: var(--g-blue-50);
-      color: var(--g-blue);
+      background: var(--c-red-50);
+      color: var(--c-red);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -969,8 +969,8 @@
     .pf-select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%235f6368'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 26px; }
     .pf-select option { background: var(--surface); color: var(--ink); }
     .pf-select:focus, .pf-input:focus {
-      border-color: var(--g-blue);
-      box-shadow: 0 0 0 1px var(--g-blue);
+      border-color: var(--c-red);
+      box-shadow: 0 0 0 1px var(--c-red);
       outline: none;
     }
     .pf-input::placeholder { color: var(--ink-xs); }
@@ -1014,7 +1014,7 @@
       background: transparent;
       border: none;
       border-radius: var(--radius-pill);
-      color: var(--g-blue);
+      color: var(--c-red);
       font-size: 13px;
       font-weight: 500;
       font-family: 'Roboto', sans-serif;
@@ -1022,7 +1022,7 @@
       transition: background var(--transition);
       text-align: center;
     }
-    .pf-clear-btn:hover { background: var(--g-blue-50); }
+    .pf-clear-btn:hover { background: var(--c-red-50); }
 
     /* ── Pathway overlay panel ──────────────────────────────────── */
     .pathway-overlay {
