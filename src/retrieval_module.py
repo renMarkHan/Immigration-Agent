@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
 from collections import Counter
 from pathlib import Path
@@ -33,6 +34,7 @@ PROCESSED_CHUNKS_FILE = (
 )
 CHROMA_DIR = Path(__file__).resolve().parent.parent / "chroma_db"
 CHROMA_COLLECTION = "policy_chunks"
+CHROMA_BATCH_SIZE = max(1, int(os.environ.get("CHROMA_BATCH_SIZE", "64")))
 
 # ---------------------------------------------------------------------------
 # BM25 parameters (D-004)
@@ -327,13 +329,20 @@ def _rebuild_chroma_index(rows: list[dict]) -> Collection:
     docs = [str(r.get("text", "")) for r in rows]
     metas = [_sanitize_metadata_for_chroma(r.get("metadata", {})) for r in rows]
 
-    batch_size = 500
+    batch_size = CHROMA_BATCH_SIZE
     for i in range(0, len(rows), batch_size):
-        collection.add(
-            ids=ids[i:i + batch_size],
-            documents=docs[i:i + batch_size],
-            metadatas=metas[i:i + batch_size],
-        )
+        try:
+            collection.add(
+                ids=ids[i:i + batch_size],
+                documents=docs[i:i + batch_size],
+                metadatas=metas[i:i + batch_size],
+            )
+        except Exception as exc:
+            start = i
+            end = min(i + batch_size, len(rows))
+            raise RuntimeError(
+                f"Chroma add failed for batch {start}:{end} (batch_size={batch_size}): {exc}"
+            ) from exc
 
     _CHROMA_INDEXED_COUNT = len(rows)
     return collection
@@ -540,6 +549,11 @@ def build_index(verbose: bool = True) -> int:
         print(f"[retrieval] Loaded {len(rows)} rows from {PROCESSED_CHUNKS_FILE}")
     collection = _rebuild_chroma_index(rows)
     count = collection.count()
+    if count == 0 and rows:
+        raise RuntimeError(
+            "Chroma rebuild completed with zero documents. "
+            "This usually means add() failed silently due to resource limits."
+        )
     if verbose:
         print(f"[retrieval] Chroma collection '{CHROMA_COLLECTION}' now has {count} docs")
     return count
