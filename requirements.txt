@@ -7,6 +7,9 @@ pydantic>=2.7.0
 # Environment variable loading
 python-dotenv>=1.0.0
 
+# Web API server
+flask>=3.0.0
+
 # Retrieval
 rank-bm25>=0.2.2
 chromadb>=0.5.0
