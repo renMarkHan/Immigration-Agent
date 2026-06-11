@@ -314,7 +314,16 @@ def _rebuild_chroma_index(rows: list[dict]) -> Collection:
         _CHROMA_INDEXED_COUNT = 0
         return collection
 
-    ids = [str(r.get("chunk_id", "")) for r in rows]
+    # Chroma requires non-empty unique IDs. Some historical corpora may contain
+    # blank or duplicate chunk_id values after repeated ingest/merge runs.
+    # Normalize IDs defensively so index rebuild never fails on bad legacy rows.
+    seen: dict[str, int] = {}
+    ids: list[str] = []
+    for i, row in enumerate(rows):
+        base = str(row.get("chunk_id", "")).strip() or f"row-{i}"
+        n = seen.get(base, 0)
+        seen[base] = n + 1
+        ids.append(base if n == 0 else f"{base}__dup{n}")
     docs = [str(r.get("text", "")) for r in rows]
     metas = [_sanitize_metadata_for_chroma(r.get("metadata", {})) for r in rows]
 
