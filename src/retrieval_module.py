@@ -518,3 +518,36 @@ def retrieve(request: RetrievalRequest) -> list[RetrievalResult]:
             )
         )
     return results
+
+
+def build_index(verbose: bool = True) -> int:
+    """Build (or rebuild) the persistent Chroma index from chunks.jsonl.
+
+    Returns:
+        Number of chunk rows indexed.
+    """
+    rows = _load_chunks()
+    if verbose:
+        print(f"[retrieval] Loaded {len(rows)} rows from {PROCESSED_CHUNKS_FILE}")
+    collection = _rebuild_chroma_index(rows)
+    count = collection.count()
+    if verbose:
+        print(f"[retrieval] Chroma collection '{CHROMA_COLLECTION}' now has {count} docs")
+    return count
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Retrieval index utilities.")
+    parser.add_argument(
+        "--build",
+        action="store_true",
+        help="Rebuild Chroma index from data/processed/chunks.jsonl",
+    )
+    args = parser.parse_args()
+
+    if args.build:
+        build_index(verbose=True)
+    else:
+        parser.print_help()
