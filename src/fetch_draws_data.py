@@ -46,6 +46,27 @@ def _make_chunk_id(suffix: str) -> str:
     return f"{CHUNK_ID_PREFIX}-{hashlib.sha256(raw.encode()).hexdigest()[:8]}"
 
 
+def _normalize_rounds(rounds) -> list[dict]:
+    """Normalize IRCC draw data to a list sorted most-recent-first.
+
+    IRCC changed the JSON shape: `rounds` is now a dict keyed by draw id
+    ("r418", "r417", ...) rather than a list. We accept either form, sort by
+    the numeric draw id descending, and return a plain list of round dicts.
+    """
+    if isinstance(rounds, dict):
+        def _keynum(kv):
+            m = re.match(r"r?(\d+)", str(kv[0]))
+            return int(m.group(1)) if m else 0
+        ordered = sorted(rounds.items(), key=_keynum, reverse=True)
+        return [v for _, v in ordered if isinstance(v, dict)]
+    if isinstance(rounds, list):
+        def _drawnum(r):
+            m = re.match(r"(\d+)", str(r.get("drawNumber", "0")))
+            return int(m.group(1)) if m else 0
+        return sorted([r for r in rounds if isinstance(r, dict)], key=_drawnum, reverse=True)
+    return []
+
+
 def _fetch_live() -> list[dict] | None:
     """Try to fetch live draw data from IRCC. Returns None on any failure."""
     try:
@@ -58,7 +79,7 @@ def _fetch_live() -> list[dict] | None:
         )
         resp.raise_for_status()
         data = resp.json()
-        rounds = data.get("rounds", [])
+        rounds = _normalize_rounds(data.get("rounds", []))
         print(f"[fetch_draws] Live fetch OK — {len(rounds)} rounds.")
         return rounds
     except Exception as exc:
@@ -71,7 +92,7 @@ def _load_snapshot() -> list[dict]:
     if not SNAPSHOT_FILE.exists():
         raise FileNotFoundError(f"Snapshot not found: {SNAPSHOT_FILE}")
     data = json.loads(SNAPSHOT_FILE.read_text())
-    rounds = data.get("rounds", [])
+    rounds = _normalize_rounds(data.get("rounds", []))
     print(f"[fetch_draws] Loaded snapshot — {len(rounds)} rounds.")
     return rounds
 
@@ -94,6 +115,9 @@ def _save_snapshot(rounds: list[dict], accessed_at: str) -> None:
 def _rounds_to_chunks(rounds: list[dict], accessed_at: str) -> list[dict]:
     """Convert raw draw records into retrieval-ready chunk dicts."""
     chunks: list[dict] = []
+
+    # Defensive: accept dict or list (IRCC changed the JSON shape).
+    rounds = _normalize_rounds(rounds)
 
     # ── Chunk 1: summary table of the most recent N draws ────────────────────
     recent = rounds[:RECENT_ROUNDS_WINDOW]
@@ -206,15 +230,34 @@ def update_chunks_file(chunks: list[dict]) -> int:
     return len(chunks)
 
 
-def _rebuild_chroma(chunks: list[dict]) -> None:
-    """Re-index the updated chunks file into ChromaDB."""
+def _reindex(chunks: list[dict]) -> None:
+    """Index the draw chunks into the active retrieval backend.
+
+    Production backend is pgvector: upsert just the draw chunks (cheap,
+    idempotent). Falls back to a full ChromaDB rebuild if pgvector is
+    unavailable (legacy/migration path).
+    """
+    # Primary: pgvector upsert (only the new draw chunks).
+    try:
+        from src import vector_store
+        n = vector_store.upsert_chunks(chunks)
+        print(f"[fetch_draws] pgvector upsert OK — {n} draw chunks indexed.")
+        return
+    except Exception as exc:
+        from src.vector_store import VectorStoreUnavailable
+        if not isinstance(exc, VectorStoreUnavailable):
+            print(f"[fetch_draws] WARN: pgvector upsert failed: {exc}")
+        else:
+            print(f"[fetch_draws] pgvector unavailable ({exc}); trying ChromaDB.")
+
+    # Fallback: legacy Chroma rebuild.
     try:
         from src.retrieval_module import build_index
         build_index()
-        print("[fetch_draws] ChromaDB index rebuilt.")
+        print("[fetch_draws] ChromaDB index rebuilt (legacy fallback).")
     except Exception as exc:
-        print(f"[fetch_draws] WARN: could not rebuild ChromaDB index: {exc}")
-        print("  Run manually: python -m src.retrieval_module --build")
+        print(f"[fetch_draws] WARN: could not rebuild any index: {exc}")
+        print("  Run manually: python -m src.ingestion_module all")
 
 
 def run(offline: bool = False, rebuild_index: bool = True) -> None:
@@ -236,7 +279,7 @@ def run(offline: bool = False, rebuild_index: bool = True) -> None:
     update_chunks_file(chunks)
 
     if rebuild_index:
-        _rebuild_chroma(chunks)
+        _reindex(chunks)
 
     print("[fetch_draws] Done.")
 
