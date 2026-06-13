@@ -709,29 +709,46 @@ def get_session(session_id: str):
 
 @app.route("/api/status", methods=["GET"])
 def status():
-    """Check whether the ChromaDB retrieval index is built and populated."""
+    """Report whether the retrieval index is built and populated.
+
+    Reads from the active retrieval backend (pgvector in production), so the
+    frontend banner reflects the real live count — not the legacy ChromaDB.
+    """
     _store.prune_expired()
     from pathlib import Path as _Path
-    chroma_dir  = _Path(__file__).resolve().parent.parent / "chroma_db"
+
     chunks_file = _Path(__file__).resolve().parent.parent / "data" / "processed" / "chunks.jsonl"
-    index_exists = chroma_dir.exists() and any(chroma_dir.iterdir()) if chroma_dir.exists() else False
     chunks_exist = chunks_file.exists()
+    backend = settings.retrieval.backend
     doc_count = 0
-    if index_exists:
+
+    if backend == "pgvector":
         try:
-            import chromadb as _chromadb
-            _c = _chromadb.PersistentClient(path=str(chroma_dir))
-            doc_count = _c.get_or_create_collection("policy_chunks").count()
+            from src import vector_store
+            doc_count = vector_store.count()
         except Exception:
             doc_count = -1
+    else:
+        # Legacy ChromaDB fallback (only when backend != pgvector).
+        chroma_dir = _Path(__file__).resolve().parent.parent / "chroma_db"
+        index_exists = chroma_dir.exists() and any(chroma_dir.iterdir()) if chroma_dir.exists() else False
+        if index_exists:
+            try:
+                import chromadb as _chromadb
+                _c = _chromadb.PersistentClient(path=str(chroma_dir))
+                doc_count = _c.get_or_create_collection("policy_chunks").count()
+            except Exception:
+                doc_count = -1
+
+    index_ready = doc_count > 0
     return jsonify({
-        "index_ready":  index_exists and doc_count > 0,
-        "index_exists": index_exists,
+        "index_ready":  index_ready,
+        "backend":      backend,
         "chunks_file":  chunks_exist,
         "doc_count":    doc_count,
         "message": (
             f"Retrieval index loaded — {doc_count} chunks indexed."
-            if doc_count > 0
+            if index_ready
             else "Retrieval index not built yet. Run: python -m src.ingestion_module"
         ),
     })
