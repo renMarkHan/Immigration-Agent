@@ -25,10 +25,14 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-from dotenv import load_dotenv
+import logging
+
 from flask import Flask, Response, jsonify, request, send_from_directory, stream_with_context
 
-load_dotenv()
+from src import logging_setup
+from src.config import settings
+
+log = logging.getLogger("app")
 
 # ---------------------------------------------------------------------------
 # App setup
@@ -40,6 +44,56 @@ app = Flask(__name__, static_folder=str(WEB_DIR), static_url_path="")
 
 SESSION_TTL_SECONDS = int(os.environ.get("SESSION_TTL_SECONDS", "21600"))  # 6h
 MAX_HISTORY_MESSAGES = int(os.environ.get("MAX_HISTORY_MESSAGES", "40"))
+
+
+# ---------------------------------------------------------------------------
+# Observability: per-request id, latency telemetry, structured logging
+# ---------------------------------------------------------------------------
+
+@app.before_request
+def _start_timer():
+    request._start_time = time.time()  # type: ignore[attr-defined]
+    rid = request.headers.get("X-Request-ID") or uuid.uuid4().hex[:12]
+    logging_setup.set_request_id(rid)
+    request._request_id = rid  # type: ignore[attr-defined]
+
+
+@app.after_request
+def _log_request(response: "Response"):
+    try:
+        elapsed_ms = (time.time() - getattr(request, "_start_time", time.time())) * 1000
+        response.headers["X-Request-ID"] = getattr(request, "_request_id", "-")
+        response.headers["X-Response-Time-ms"] = f"{elapsed_ms:.0f}"
+        if request.path.startswith("/api/"):
+            log.info(
+                "%s %s -> %s (%.0fms)",
+                request.method, request.path, response.status_code, elapsed_ms,
+            )
+    except Exception:
+        pass
+    return response
+
+
+@app.errorhandler(Exception)
+def _handle_uncaught(exc: Exception):
+    log.exception("unhandled error on %s %s: %s", request.method, request.path, exc)
+    return jsonify({"error": "internal_error", "request_id": getattr(request, "_request_id", "-")}), 500
+
+
+# Rate limiting (graceful if flask-limiter is unavailable).
+try:
+    from flask_limiter import Limiter
+    from flask_limiter.util import get_remote_address
+
+    limiter = Limiter(
+        get_remote_address,
+        app=app,
+        default_limits=["120 per minute"],
+        storage_uri="memory://",
+    )
+except Exception as _exc:  # pragma: no cover
+    limiter = None
+    log.info("rate limiting disabled (flask-limiter unavailable): %s", _exc)
 
 
 def _prewarm_retrieval_index() -> None:
@@ -370,7 +424,28 @@ def index():
 
 @app.route("/api/health", methods=["GET"])
 def health():
-    return jsonify({"status": "ok"})
+    """Liveness probe — process is up."""
+    return jsonify({"status": "ok", "env": settings.env})
+
+
+@app.route("/api/ready", methods=["GET"])
+def ready():
+    """Readiness probe — dependencies are usable (retrieval + LLM config)."""
+    checks = {"llm_configured": bool(settings.llm.api_key and settings.llm.endpoint)}
+    backend = settings.retrieval.backend
+    checks["retrieval_backend"] = backend
+    try:
+        if backend == "pgvector":
+            from src import vector_store
+            checks["vector_count"] = vector_store.count()
+            checks["retrieval_ready"] = checks["vector_count"] > 0
+        else:
+            checks["retrieval_ready"] = True
+    except Exception as exc:
+        checks["retrieval_ready"] = False
+        checks["retrieval_error"] = str(exc)[:160]
+    ok = checks.get("retrieval_ready", False) and checks["llm_configured"]
+    return jsonify({"ready": ok, "checks": checks}), (200 if ok else 503)
 
 
 @app.route("/api/session", methods=["POST"])
@@ -657,8 +732,10 @@ def status():
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    print("Starting Canada PR Navigator web server on http://localhost:5050")
-    print(f"Web UI:  http://localhost:5050/")
-    print(f"API:     http://localhost:5050/api/health")
+    host, port = settings.web_host, settings.web_port
+    log.info("Starting Canada PR Navigator on http://%s:%s (env=%s)", host, port, settings.env)
+    log.info("Web UI: /   Health: /api/health   Ready: /api/ready")
     _prewarm_retrieval_index()
-    app.run(host="0.0.0.0", port=5050, debug=False, use_reloader=False)
+    # Development server only. In production run via gunicorn (see Dockerfile):
+    #   gunicorn -w 2 -k gthread -b 0.0.0.0:5050 src.app:app
+    app.run(host=host, port=port, debug=False, use_reloader=False)

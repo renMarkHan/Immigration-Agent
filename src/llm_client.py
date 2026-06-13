@@ -7,13 +7,11 @@ All modules call generate() from here; never instantiate the client directly.
 
 from __future__ import annotations
 
-import os
 from typing import Any, Iterator
 
-from dotenv import load_dotenv
 from openai import OpenAI
 
-load_dotenv()
+from src.config import settings
 
 _client: OpenAI | None = None
 
@@ -21,9 +19,7 @@ _client: OpenAI | None = None
 def _get_client() -> OpenAI:
     global _client
     if _client is None:
-        api_key = os.environ["LLM_API_KEY"]
-        base_url = os.environ["LLM_ENDPOINT"].removesuffix("/chat/completions")
-        _client = OpenAI(api_key=api_key, base_url=base_url)
+        _client = OpenAI(api_key=settings.llm.api_key, base_url=settings.llm.base_url)
     return _client
 
 
@@ -41,13 +37,8 @@ def generate(
     We return the final content field; reasoning tokens are discarded.
     """
     client = _get_client()
-    resolved_model = model or os.environ.get("LLM_MODEL", "qwen3-30b-a3b-fp8")
-    resolved_timeout = timeout_seconds
-    if resolved_timeout is None:
-        try:
-            resolved_timeout = float(os.environ.get("LLM_TIMEOUT_SECONDS", "45"))
-        except Exception:
-            resolved_timeout = 45.0
+    resolved_model = model or settings.llm.model
+    resolved_timeout = timeout_seconds if timeout_seconds is not None else settings.llm.timeout_seconds
 
     try:
         response = client.chat.completions.create(
@@ -74,7 +65,7 @@ def generate_stream(
 ) -> Iterator[str]:
     """Call the LLM with streaming enabled. Yields text chunks as they arrive."""
     client = _get_client()
-    resolved_model = model or os.environ.get("LLM_MODEL", "qwen3-30b-a3b-fp8")
+    resolved_model = model or settings.llm.model
     try:
         response = client.chat.completions.create(
             model=resolved_model,

@@ -1,22 +1,32 @@
 # Canada Immigration & PR Navigator
 
-Team 3 — MVP implementation.
+Team 3 — production build.
 
 ## What this project includes
 
 - Shared schema contracts for all modules (Pydantic)
+- Central typed configuration (`src/config.py`, pydantic-settings)
 - Multi-turn intake state machine with profile collection
 - End-to-end orchestrator with intent routing, L3 safety gate, and D-003 retry logic
 - Scoring-based intent classifier (5 intents, typo-tolerant, personal-context amplifier)
 - Risk-level routing with decision trace (`risk_explain` in every response)
-- Hybrid BM25 + vector retrieval (ChromaDB, local index)
+- **Multilingual (EN/ZH) embeddings** — `BAAI/bge-m3`, pluggable provider
+- **Postgres + pgvector** vector store with HNSW cosine, incremental upserts
+- **Hybrid retrieval** — RRF fusion of dense + full-text, then a `bge-reranker-v2-m3`
+  cross-encoder rerank (legacy BM25+Chroma kept as automatic fallback)
+- **Scrapling-based crawler** + trafilatura extraction, content-hash dedup,
+  language detection, and effective-date extraction
+- Token-budget-aware context assembly (dedup + relevance packing + truncation)
 - CRS calculator policy tool
 - Action-specific LLM prompt templates (4 action types, QA sub-type selection)
-- Flask web UI served on port 5050
+- Flask web UI (gunicorn in production) with health/readiness probes,
+  request IDs, latency telemetry, and rate limiting
 - Express Entry draw data ingestion from IRCC JSON API
-- Eval harness with intent accuracy, confusion matrix, and citation checks
+- Eval harness: intent accuracy + confusion matrix, **retrieval metrics
+  (Recall@k / Hit@k / MRR@k)**, and a **RAGAS-style LLM-as-judge** with calibration
 
-This repo is in an interactive MVP phase, not a production-ready release phase. The architecture and contracts are in place, but answer quality still depends on continued retrieval, ingestion, and prompt tuning.
+Architecture decisions are recorded in `docs/Decision-Log.md` (see D-000 for the
+RAG vs GraphRAG vs parametric-wiki selection and D-011 for the production stack).
 
 ## What is implemented on `main`
 
@@ -126,17 +136,35 @@ LLM_API_KEY=<your_student_id_token>
 LLM_MODEL=qwen3-30b-a3b-fp8
 ```
 
-## Build retrieval index
+## Start the database (Postgres + pgvector)
 
-Run once before first use (or after adding new data):
+The production retrieval backend is Postgres + pgvector. The quickest path is
+the bundled compose service:
 
 ```bash
-python -m src.ingestion_module
+docker compose up -d db        # starts pgvector/pgvector:pg16 on :5432
+```
+
+Set `RETRIEVAL_BACKEND=pgvector` (default) in `.env`. If no database is
+reachable, retrieval automatically falls back to the legacy BM25 + Chroma path,
+so the app still runs during migration.
+
+## Build retrieval index
+
+Run once before first use (or after adding new data). Ingestion crawls with
+Scrapling, extracts main content, chunks with overlap, enriches metadata, writes
+the portable `data/processed/chunks.jsonl`, and upserts into pgvector:
+
+```bash
+python -m src.ingestion_module             # ingest P0 sources
+python -m src.ingestion_module all         # ingest all registry sources
 python -m src.fetch_draws_data --offline   # inject Express Entry draw data
 ```
 
 `--offline` uses the local snapshot in `data/raw/ee-rounds-data.json`.
 Omit `--offline` to fetch the latest draw results live from IRCC.
+
+> First run downloads the bge-m3 embedding and bge-reranker models (~2 GB).
 
 ## Launch web chatbox (recommended)
 
@@ -168,22 +196,30 @@ Tests LLM endpoint connectivity and runs a mock pipeline pass.
 
 ## Run eval harness
 
-```bash
-python -m src.ingestion_module all
-```
-
-Output: `eval/results/latest.json`
-
-Metrics reported:
-- `pass_rate` — answer content + citation checks
-- `intent_accuracy` — classifier accuracy over labelled samples
-- `intent_confusion_matrix` — per-intent breakdown
-
-Intent-only fast check (no LLM call, <5 s):
+Answer-level eval (content + citation checks, intent accuracy, confusion matrix):
 
 ```bash
-python -m eval.run_eval --intent-only
+python -m eval.run_eval                 # full run -> eval/results/latest.json
+python -m eval.run_eval --intent-only   # fast, no LLM call (<5 s)
 ```
+
+Retrieval-quality metrics (Recall@k / Hit@k / MRR@k) over `eval/samples.jsonl`:
+
+```bash
+python -m eval.retrieval_metrics --k 1 3 5 10   # -> eval/retrieval_report.json
+```
+
+RAGAS-style LLM-as-judge (context relevance / faithfulness / answer relevance)
+with calibration against the manual hallucination labels:
+
+```bash
+python -m eval.llm_judge --limit 20             # -> eval/judge_report.json
+```
+
+> The judge runs offline (not in the request path). `--limit` caps cost.
+> Judge scores should be calibrated against human labels before being trusted
+> at scale (see `calibration` in the report and the limitations documented in
+> `eval/llm_judge.py`).
 
 ## Keep draw data current
 

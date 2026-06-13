@@ -1,12 +1,43 @@
 services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: rag-db
+    environment:
+      POSTGRES_DB: rag
+      POSTGRES_USER: rag
+      POSTGRES_PASSWORD: rag
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rag -d rag"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
   app:
     build: .
     container_name: rag-app
+    depends_on:
+      db:
+        condition: service_healthy
     ports:
       - "5050:5050"
     env_file:
       - .env
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: rag
+      DB_USER: rag
+      DB_PASSWORD: rag
     volumes:
-      - ./chroma_db:/app/chroma_db
       - ./data:/app/data
+      - hf_cache:/root/.cache/huggingface
     restart: unless-stopped
+
+volumes:
+  pgdata:
+  hf_cache:

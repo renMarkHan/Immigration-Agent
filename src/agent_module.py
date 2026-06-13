@@ -698,7 +698,14 @@ def build_answer(
     completeness = assess_completeness(profile)
     confidence_warning = completeness.confidence_warning
 
-    evidence_block = _format_evidence_block(results, tool_results)
+    # Estimate conversation-history token footprint so the evidence budget
+    # leaves room for prior turns we will replay into the prompt.
+    _history_tokens = 0
+    if conv_history:
+        from src.context_builder import estimate_tokens as _est
+        _history_tokens = sum(_est(str(m.get("content", ""))) for m in conv_history[-8:])
+
+    evidence_block = _format_evidence_block(results, tool_results, history_tokens=_history_tokens)
     profile_block  = profile_to_context(profile)
 
     # Select format instructions based on detected intent.
@@ -760,44 +767,17 @@ def build_answer(
 def _format_evidence_block(
     results: list[RetrievalResult],
     tool_results: list[ToolResult],
+    history_tokens: int = 0,
 ) -> str:
-    """Format retrieved chunks and tool outputs into a structured evidence block."""
-    lines: list[str] = []
+    """Format retrieved evidence into a token-budget-bounded, de-duplicated block.
 
-    for i, r in enumerate(results, 1):
-        citation_str = ""
-        if r.citation:
-            c = r.citation
-            citation_str = (
-                f"  Source: {c.source_url}\n"
-                f"  Section: {c.section_or_title}\n"
-                f"  Effective/Updated: {c.effective_date_or_last_updated_or_unknown}\n"
-                f"  Accessed: {c.accessed_at}"
-            )
-        lines.append(
-            f"[Evidence {i}]\n"
-            f"  Text: {r.text}\n"
-            f"{citation_str}"
-        )
+    Delegates to context_builder, which computes a token budget from the model's
+    context window, de-duplicates overlapping chunks, packs evidence in
+    relevance order, and truncates the tail chunk to fit (Decision D-011).
+    """
+    from src.context_builder import assemble_evidence
 
-    for j, t in enumerate(tool_results, 1):
-        # Canonical ToolResult fields come from src/schemas.py: output + error.
-        # Keep one-cycle backwards compatibility for legacy fields from earlier Role B code.
-        output = t.output if hasattr(t, "output") else getattr(t, "output_data", None)
-        error = t.error if hasattr(t, "error") else getattr(t, "error_msg", None)
-
-        if error is None:
-            lines.append(
-                f"[Tool Result {j}: {t.tool_name}]\n"
-                f"  Output: {json.dumps(output, indent=2)}"
-            )
-        else:
-            lines.append(
-                f"[Tool Result {j}: {t.tool_name} — ERROR]\n"
-                f"  Error: {error}"
-            )
-
-    return "\n\n".join(lines) if lines else "(no evidence)"
+    return assemble_evidence(results, tool_results, history_tokens=history_tokens)
 
 
 # Maps intent → plain-English action name injected into the system override

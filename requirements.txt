@@ -1,21 +1,46 @@
-# Core LLM client
+# ─────────────────────────────────────────────────────────────────────────
+# Canada Immigration & PR Navigator — production dependencies
+# ─────────────────────────────────────────────────────────────────────────
+
+# Core LLM client (OpenAI-compatible; provider-agnostic via src/config.py)
 openai>=1.25.0
 
-# Data validation and schemas
+# Data validation, schemas, and typed settings
 pydantic>=2.7.0
+pydantic-settings>=2.2.0
 
 # Environment variable loading
 python-dotenv>=1.0.0
 
-# Web API server
+# ── Web API server ────────────────────────────────────────────────────────
 flask>=3.0.0
+gunicorn>=22.0.0          # production WSGI server
+flask-limiter>=3.7.0      # rate limiting
 
-# Retrieval
-rank-bm25>=0.2.2
-chromadb>=0.5.0
+# ── Retrieval / vector store ──────────────────────────────────────────────
+rank-bm25>=0.2.2          # legacy in-memory BM25 fallback
+psycopg[binary,pool]>=3.1.18   # Postgres driver + connection pool
+pgvector>=0.2.5           # pgvector adapters for psycopg
+chromadb>=0.5.0           # legacy fallback backend
 
-# HTTP client (used by openai SDK; also available directly)
+# ── Embeddings + reranking (multilingual EN/ZH, D-011) ────────────────────
+FlagEmbedding>=1.2.10     # BGE-M3 embeddings + bge-reranker-v2-m3
+sentence-transformers>=2.7.0   # fallback embedding/reranker runtime
+torch>=2.2.0
+
+# ── Ingestion / crawling ──────────────────────────────────────────────────
+scrapling>=0.2.9          # adaptive, resilient scraping (D-011)
+trafilatura>=1.9.0        # main-content extraction / boilerplate removal
+beautifulsoup4>=4.12.0    # HTML parsing helpers
+lxml>=5.2.0
+lxml_html_clean>=0.1.1    # required by trafilatura's lxml cleaner
+langdetect>=1.0.9         # per-chunk language detection
+
+# ── HTTP ──────────────────────────────────────────────────────────────────
 httpx>=0.27.0
 
-# Eval utilities
+# ── Observability ─────────────────────────────────────────────────────────
+structlog>=24.1.0         # structured JSON logging
+
+# ── Eval / tooling ────────────────────────────────────────────────────────
 tqdm>=4.66.0

@@ -23,6 +23,7 @@ from typing import Any
 import chromadb
 from chromadb.api.models.Collection import Collection
 
+from src.config import settings
 from src.policy_tool_module import normalize_section_or_title
 from src.schemas import RetrievalRequest, RetrievalResult
 
@@ -439,9 +440,106 @@ def _rerank_score(query: str, row: dict, hybrid_score: float) -> float:
 # Public retrieval API
 # ---------------------------------------------------------------------------
 
-def retrieve(request: RetrievalRequest) -> list[RetrievalResult]:
+def _build_citation(md: dict) -> dict:
+    """Construct the D-007 citation block from chunk metadata."""
+    return {
+        "source_url": md.get("source_url", "unknown"),
+        "section_or_title": normalize_section_or_title(md.get("section_or_title")),
+        "effective_date_or_last_updated_or_unknown": md.get(
+            "effective_date_or_last_updated_or_unknown",
+            md.get("effective_date", "unknown"),
+        ),
+        "accessed_at": md.get("accessed_at", "unknown"),
+    }
+
+
+def _to_results(rows: list[dict]) -> list[RetrievalResult]:
+    results: list[RetrievalResult] = []
+    for row in rows:
+        md = row.get("metadata", {}) or {}
+        results.append(
+            RetrievalResult(
+                chunk_id=str(row.get("chunk_id") or "unknown"),
+                text=row.get("text", ""),
+                score=float(row.get("score", 0.0)),
+                metadata=md,
+                citation=_build_citation(md),
+            )
+        )
+    return results
+
+
+def _pgvector_retrieve(request: RetrievalRequest) -> list[RetrievalResult]:
+    """Production path: pgvector RRF hybrid → cross-encoder rerank.
+
+    Raises VectorStoreUnavailable if the backend cannot be reached, letting
+    retrieve() fall back to the legacy path.
     """
-    Return ranked RetrievalResult list (length <= request.top_k_final).
+    from src import vector_store, reranker
+
+    filters = {
+        "province": request.province,
+        "program": request.program,
+        "stream": request.stream,
+        "source_type": request.source_type,
+    }
+    filters = {k: v for k, v in filters.items() if v}
+
+    expanded = _expand_query(request.query)
+
+    # Fetch a wide candidate set with filters; relax filters if they starve recall.
+    candidates = vector_store.hybrid_search(
+        expanded, k=request.top_k_initial, filters=filters or None
+    )
+    if not candidates and filters:
+        candidates = vector_store.hybrid_search(expanded, k=request.top_k_initial)
+    if not candidates:
+        return []
+
+    # Cross-encoder rerank on the ORIGINAL query (not expanded) for precision.
+    if settings.retrieval.use_reranker:
+        ranked = reranker.rerank(request.query, candidates, request.top_k_final)
+    else:
+        ranked = candidates[: request.top_k_final]
+
+    return _to_results(ranked)
+
+
+def retrieve(request: RetrievalRequest) -> list[RetrievalResult]:
+    """Return ranked RetrievalResult list (length <= request.top_k_final).
+
+    Dispatches to the configured backend:
+      - "pgvector" (production): RRF hybrid + cross-encoder rerank
+      - "chroma"   (legacy):     in-memory BM25 + Chroma blend
+
+    The pgvector path automatically falls back to the legacy path if the
+    database is unreachable, so the service degrades gracefully.
+    """
+    if settings.retrieval.backend == "pgvector":
+        try:
+            from src import vector_store
+
+            return _pgvector_retrieve(request)
+        except vector_store.VectorStoreUnavailable as exc:
+            import logging
+            logging.getLogger("retrieval").info(
+                "pgvector unavailable, using legacy retrieval: %s", exc
+            )
+        except Exception as exc:
+            import logging
+            logging.getLogger("retrieval").warning(
+                "pgvector retrieve failed (%s); using legacy retrieval", exc
+            )
+    return _legacy_retrieve(request)
+
+
+def _legacy_retrieve(request: RetrievalRequest) -> list[RetrievalResult]:
+    """
+    Legacy in-memory BM25 + ChromaDB hybrid retrieval (fallback path).
+
+    Used when the pgvector backend is unavailable (e.g. during migration or
+    in environments without Postgres). Kept fully functional so the product
+    never loses retrieval capability.
 
     Pipeline:
     1. Load all chunks from processed JSONL.

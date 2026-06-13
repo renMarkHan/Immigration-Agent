@@ -186,5 +186,66 @@ def run_eval() -> None:
             print(f"WARNING: L3 refusal rate {refusal_rate:.0%} — below 98% safety gate (D-005)")
 
 
+# Map eval sample `action` labels to intent labels (for intent-only scoring).
+_ACTION_TO_INTENT = {
+    "action_1": "visualize",
+    "action_2": "match",
+    "action_3": "calculate",
+    "action_4": "qa",
+}
+
+
+def run_intent_only() -> None:
+    """Fast classifier-only evaluation — no retrieval, no LLM calls.
+
+    The classifier normally uses the LLM as its primary strategy; here we
+    disable that and exercise the deterministic keyword fallback so the run is
+    fast (<5s) and offline.
+    """
+    import src.agent_module as _am
+    _am._classify_intent_llm = lambda *_a, **_k: None  # force keyword fallback
+
+    samples = load_samples()
+    scored = []
+    correct = 0
+    graded = 0
+    for sample in samples:
+        expected = sample.get("expected_intent") or _ACTION_TO_INTENT.get(sample.get("action", ""))
+        predicted, _scores, top2, ambiguous = detect_intent_with_confidence(sample["query"])
+        row = {
+            "id": sample["id"],
+            "expected_intent": expected,
+            "predicted_intent": predicted,
+            "predicted_intent_ambiguous": ambiguous,
+        }
+        if expected:
+            graded += 1
+            ok = predicted == expected or (ambiguous and expected in top2)
+            row["intent_pass"] = ok
+            correct += 1 if ok else 0
+        scored.append(row)
+
+    acc = round(correct / graded, 4) if graded else None
+    matrix = _build_intent_confusion(scored)
+    print(f"Intent-only eval: {correct}/{graded} correct"
+          + (f" ({acc:.0%})" if acc is not None else ""))
+    print("Confusion (expected -> {predicted: n}):")
+    for exp in sorted(matrix):
+        print(f"  {exp}: {matrix[exp]}")
+
+
 if __name__ == "__main__":
-    run_eval()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Eval harness for the navigator pipeline.")
+    parser.add_argument(
+        "--intent-only",
+        action="store_true",
+        help="Run only the intent classifier (no retrieval/LLM; <5s).",
+    )
+    args = parser.parse_args()
+
+    if args.intent_only:
+        run_intent_only()
+    else:
+        run_eval()

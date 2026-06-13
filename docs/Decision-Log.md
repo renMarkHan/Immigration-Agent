@@ -19,6 +19,35 @@ Purpose: Persistent record of planning and execution decisions for auditability 
 
 ## Decision Entries
 
+### D-000 System Architecture: RAG vs GraphRAG vs Parametric Wiki (Frozen)
+- Date: 2026-04-07 (recorded retroactively 2026-06-12)
+- Owner: Team (Architecture)
+- Status: Frozen
+- Decision: Retrieval-Augmented Generation (RAG) over an external, citable
+  document corpus. GraphRAG and a parametric "LLM wiki" were considered and
+  rejected for this domain.
+- Rationale:
+  - Domain shape: ~90% of immigration questions are single-hop factual lookups
+    ("what does this policy say"). Every answer must be traceable to an official
+    URL. RAG's chunk → citation mapping satisfies the auditability requirement
+    (see D-007) natively.
+  - GraphRAG rejected: its advantage is multi-hop reasoning and cross-document
+    entity aggregation. Our entity graph (program → stream → requirement) is
+    real, but building and maintaining a knowledge graph over a small corpus is
+    high-cost/low-return for our query mix, and graph maintenance compounds the
+    freshness problem below.
+  - Parametric / "LLM wiki" rejected: immigration policy changes frequently
+    (Express Entry draws roughly every two weeks; dated policy updates).
+    Relying on model memory makes refresh impossible and makes hallucination
+    (unacceptable in a legal/policy context) far more likely. This is precisely
+    why we built the L3 refusal gate (D-001) and hallucination audits (D-005).
+- Impact: All ingestion, retrieval, citation, and eval design follows from this.
+- Verification: Every factual answer carries >=1 official-source citation;
+  freshness handled by re-ingestion (D-011), not model retraining.
+- Re-evaluation trigger: If multi-hop comparison queries ("compare language
+  requirements across N province streams") become a primary use case, revisit
+  a hybrid GraphRAG layer over the existing corpus.
+
 ### D-001 Refusal Policy (Frozen)
 - Date: 2026-04-07
 - Owner: Team (final sign-off by Yuhan Ren)
@@ -297,9 +326,73 @@ Copy and append this block under the relevant decision ID:
 
 ---
 
+### D-011 Production Hardening Architecture (Frozen)
+- Date: 2026-06-12
+- Owner: Team (Architecture / Platform)
+- Status: Frozen
+- Context: Transition from interactive MVP to a launchable, production product.
+  Each pipeline step was upgraded; this entry records the cross-cutting choices.
+- Decisions:
+  1. Embeddings — multilingual `BAAI/bge-m3` (EN + ZH + 100+ langs), replacing
+     Chroma's default English-only MiniLM. Product serves English- and
+     Chinese-speaking users; bge-m3 also bridges ZH queries to the EN corpus.
+     Provider is pluggable (`src/embeddings.py`): bge | openai | fake (tests).
+  2. Vector store — migrate ChromaDB → Postgres + pgvector (`src/vector_store.py`).
+     HNSW cosine ANN, JSONB + typed filter columns, real incremental upserts
+     (ON CONFLICT) instead of full index rebuilds, durable backup/restore.
+  3. Retrieval — hybrid via Reciprocal Rank Fusion of dense (pgvector) +
+     full-text (Postgres tsvector), then a multilingual cross-encoder rerank
+     (`BAAI/bge-reranker-v2-m3`) replacing the MVP's hand-rolled lexical rerank.
+     Legacy BM25+Chroma kept as an automatic fallback during migration.
+  4. Crawling — Scrapling (https://github.com/D4Vinci/Scrapling) with httpx
+     fallback; trafilatura main-content extraction replacing regex tag-strip
+     (kills nav/footer/boilerplate noise that polluted MVP chunks).
+  5. Ingestion — structure-aware chunking WITH overlap, content-hash dedup,
+     per-chunk language detection, effective-date extraction (canada.ca
+     "Date modified" + meta tags) so temporal provenance is no longer "unknown",
+     and richer metadata (doc_id, section hierarchy, checksum, keywords).
+  6. Generation — token-budget-aware context assembly (`src/context_builder.py`):
+     dedup, relevance-ordered packing, tail truncation to fit the model window.
+  7. Evaluation — added retrieval metrics (Recall@k / Hit@k / MRR@k,
+     `eval/retrieval_metrics.py`) and a real RAGAS-style LLM-as-judge with
+     human calibration (`eval/llm_judge.py`), replacing the MVP stub.
+  8. LLM — provider-agnostic via central config (`src/config.py`); course
+     endpoint retained for now, swappable to OpenAI/self-hosted by env only.
+  9. Platform — central typed settings, structured logging + request IDs +
+     latency telemetry, liveness/readiness probes, rate limiting, gunicorn
+     image with healthcheck, and CI (pgvector service + fake embeddings).
+- Impact: Touches every module; preserves existing schemas/signatures
+  (`retrieve`, `RetrievalRequest`, `FinalAnswer`, `ingest`).
+- Verification: Retrieval metrics baseline captured (legacy backend) at
+  Hit@5≈0.92 / MRR@5≈0.81 / Recall@5≈0.72 on 110 samples; re-run after the
+  pgvector + bge-m3 + reranker stack is live to measure lift.
+- Open decisions (deferred, owner to confirm): production LLM provider; local
+  vs hosted embedding runtime at deploy time; deployment target.
+
+Update (Execution):
+- Update Date: 2026-06-12
+- Change Summary: Resolved two of the three deferred decisions.
+  (1) Production LLM provider: **deepseek-v4-flash-260425 via Volcengine ark**
+      (`https://ark.cn-beijing.volces.com/api/v3`). Verified live through
+      `src/llm_client.generate`. The provider-agnostic client + central config
+      made this a pure env change (no code edits).
+  (2) Deployment target: **single DigitalOcean droplet (VPS)** for the test
+      environment, via docker-compose (app + pgvector). Matches the bundled
+      compose; for higher availability migrate the DB to a managed Postgres.
+- Bug fixed: nested settings groups (LLMSettings, etc.) did not read `.env`
+  (only the top-level AppSettings did), so the deepseek switch was silently
+  ignored and the app kept using the qwen3 defaults. `src/config.py` now calls
+  `load_dotenv()` before instantiating settings. Defaults updated to deepseek.
+- Still open: local (bge-m3) vs hosted embedding runtime on the droplet —
+  depends on droplet RAM/CPU (bge-m3 + reranker need ~2-3 GB and are CPU-slow on
+  small droplets). See follow-up below.
+- Owner: Yuhan Ren
+
 ## Change Log
 
 - 2026-04-07: v0.3 initialized from planning decisions and role updates.
+- 2026-06-12: D-000 recorded (architecture selection: RAG vs GraphRAG vs Wiki).
+- 2026-06-12: D-011 added (production hardening across all pipeline steps).
 - 2026-04-07: D-010 added (current model and endpoint constraints for this phase).
 - 2026-04-07: D-006 execution update added (interactive CLI path and handoff visibility upgrade).
 - 2026-04-07: D-004 execution update added (Ontario retrieval process demonstration path).
