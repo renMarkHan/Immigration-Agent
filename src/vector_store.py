@@ -50,6 +50,13 @@ def _get_pool():
             ) from exc
 
         def _configure(conn):
+            # Bootstrap order matters: register_vector() requires the `vector`
+            # type to already exist, so ensure the extension is created on every
+            # fresh connection BEFORE registering the adapter. Without this, a
+            # brand-new database fails every connection in the pool with
+            # "vector type not found in the database".
+            conn.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+            conn.commit()
             register_vector(conn)
 
         try:
