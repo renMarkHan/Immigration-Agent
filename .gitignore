@@ -16,7 +16,16 @@ build/
 eval/retrieval_report.json
 eval/judge_report.json
 
-# LaTeX build artifacts (intro deck)
+# LaTeX build artifacts + product-intro deck (regenerated locally, not shipped)
 *.aux
 *.out
 intro.log
+intro.pdf
+intro.tex
+generate_intro_pdf.py
+Canada_PR_Navigator_产品介绍.pdf
+
+# Local agent skills / tooling — machine-specific, not product code.
+# (.devin/skills/*/SKILL.md are already tracked; only the local symlink is ignored)
+.github/skills/
+.devin/skills/impeccable

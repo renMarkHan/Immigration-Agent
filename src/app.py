@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import threading
 import time
 import uuid
@@ -362,11 +363,20 @@ def _ensure_turn_ready(turn, data: dict, session, message: str, profile_override
             turn.agent_message = _build_collecting_message_from_profile(session.profile)
 
     # Bypass profile gate for factual / general / calculate / L3 requests.
-    if not turn.ready_for_retrieval:
+    # Guard: never bypass for pure greetings / one-word chitchat — let the
+    # state machine handle those so "Hi" doesn't trigger the RAG pipeline.
+    _CHITCHAT_RE = re.compile(
+        r"^\s*(hi+|hello|hey|thanks?|thank you|ok(ay)?|yes|no|sure|great|"
+        r"got it|cool|good|bye|goodbye|test|start|begin)\s*[!.?]*\s*$",
+        re.IGNORECASE,
+    )
+    if not turn.ready_for_retrieval and not _CHITCHAT_RE.match(message):
         from src.agent_module import detect_intent, is_l3_query, INTENT_QA, INTENT_GENERAL, INTENT_CALCULATE
-        _orig = data["original_query"] or message
-        _intent = detect_intent(_orig)
-        if _intent in (INTENT_QA, INTENT_GENERAL, INTENT_CALCULATE) or is_l3_query(_orig):
+        # Use the current message for intent detection, not the stored
+        # original_query — which may be a greeting or one-word opener that
+        # would misclassify all subsequent requests as INTENT_GENERAL.
+        _intent = detect_intent(message)
+        if _intent in (INTENT_QA, INTENT_GENERAL, INTENT_CALCULATE) or is_l3_query(message):
             turn.ready_for_retrieval = True
             turn.agent_message = ""
 

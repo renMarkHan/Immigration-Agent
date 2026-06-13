@@ -2144,6 +2144,20 @@ async function sendMessage() {
         } else if (evt.type === 'error') {
           hideTyping();
           if (streamRow) { streamRow.remove(); streamRow = null; }
+          // Auto-recover: if the session expired or the server restarted,
+          // silently create a new session and replay the last message so the
+          // user never has to manually refresh.
+          if ((evt.message || '').toLowerCase().includes('session not found')) {
+            sessionId = null;
+            _sessionPromise = _prewarmSession();
+            await _sessionPromise;
+            if (sessionId) {
+              setWaiting(false);
+              document.getElementById('userInput').value = _lastUserText;
+              await sendMessage();
+              return;
+            }
+          }
           appendError(evt.message || 'Something went wrong while generating your answer.', { retry: true });
         }
       }

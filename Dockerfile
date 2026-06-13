@@ -23,7 +23,8 @@ EXPOSE 5050
 HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
     CMD curl -fsS http://localhost:5050/api/health || exit 1
 
-# Production WSGI server. LLM/embedding calls are IO/compute bound, so use a
-# small number of threaded workers. Tune -w / --threads for your hardware.
-CMD ["gunicorn", "-w", "2", "-k", "gthread", "--threads", "4", \
+# Production WSGI server. Sessions are stored in-memory (per-process), so we
+# must run a single gunicorn worker. Upgrade to Redis-backed sessions before
+# scaling to multiple workers.
+CMD ["gunicorn", "-w", "1", "-k", "gthread", "--threads", "4", \
      "-b", "0.0.0.0:5050", "--timeout", "120", "src.app:app"]
