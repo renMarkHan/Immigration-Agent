@@ -20,10 +20,14 @@ bge-m3 dense vectors, so both arms contribute.
 from __future__ import annotations
 
 import json
+import logging
+import time
 from typing import Any, Iterable
 
 from src.config import settings
 from src import embeddings
+
+log = logging.getLogger("vector_store")
 
 # ---------------------------------------------------------------------------
 # Lazy psycopg pool + pgvector registration
@@ -168,12 +172,17 @@ def upsert_chunks(rows: list[dict], embed: bool = True, batch_size: int = 128) -
         return 0
     pool = _get_pool()
     written = 0
-    for start in range(0, len(rows), batch_size):
+    total = len(rows)
+    log.info("upsert: embedding+indexing %d chunks (db batch=%d)...", total, batch_size)
+    t0 = time.time()
+    for start in range(0, total, batch_size):
         batch = rows[start:start + batch_size]
+        t_embed = time.time()
         if embed:
             vectors = embeddings.embed_documents([str(r.get("text", "")) for r in batch])
         else:
             vectors = [r.get("embedding") for r in batch]
+        embed_secs = time.time() - t_embed
 
         params = []
         for r, vec in zip(batch, vectors):
@@ -219,6 +228,11 @@ def upsert_chunks(rows: list[dict], embed: bool = True, batch_size: int = 128) -
                 )
             conn.commit()
         written += len(batch)
+        log.info(
+            "upsert progress: %d/%d committed (last batch: embed %.1fs, %d rows)",
+            written, total, embed_secs, len(batch),
+        )
+    log.info("upsert done: %d chunks in %.1fs", written, time.time() - t0)
     return written
 
 
