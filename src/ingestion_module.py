@@ -390,6 +390,27 @@ def ingest(source_url: str, source_meta: dict[str, Any] | None = None) -> int:
     return len(new_records)
 
 
+def reindex_from_jsonl() -> int:
+    """Rebuild the pgvector index from the existing chunks.jsonl WITHOUT crawling.
+
+    Use this when the chunks were already scraped (chunks.jsonl is populated)
+    but the vector store is empty or stale — e.g. after a DB rebuild, an
+    embedding-model change, or a failed initial upsert. No network requests.
+    """
+    rows, _ = _load_existing()
+    if not rows:
+        log.warning("no chunks found in %s — run ingest_all first", PROCESSED_CHUNKS_FILE)
+        return 0
+    try:
+        vector_store.delete_all()
+        n = vector_store.upsert_chunks(rows)
+    except vector_store.VectorStoreUnavailable as exc:
+        log.error("vector store unavailable, cannot reindex: %s", exc)
+        return 0
+    log.info("reindexed %d chunks from %s into pgvector", n, PROCESSED_CHUNKS_FILE)
+    return n
+
+
 def ingest_all(priority_filter: str | None = "P0") -> int:
     """Ingest all registry sources, optionally filtered by priority."""
     if not URL_REGISTRY_FILE.exists():
@@ -420,7 +441,12 @@ if __name__ == "__main__":
     import sys
 
     pfilter = sys.argv[1] if len(sys.argv) > 1 else None
-    if pfilter == "all":
-        pfilter = None
-    log.info("running ingest_all(priority_filter=%r)", pfilter)
-    ingest_all(priority_filter=pfilter)
+    if pfilter == "reindex":
+        # Index existing chunks.jsonl into pgvector WITHOUT re-crawling.
+        log.info("running reindex_from_jsonl() — no network crawl")
+        reindex_from_jsonl()
+    else:
+        if pfilter == "all":
+            pfilter = None
+        log.info("running ingest_all(priority_filter=%r)", pfilter)
+        ingest_all(priority_filter=pfilter)
